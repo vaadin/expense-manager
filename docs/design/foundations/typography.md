@@ -211,6 +211,30 @@ sentence-case report detail — visibly worse than either convention applied con
 A later survey should raise this again. An **open** row means unresolved, not resolved in
 the app's favour.
 
+### The VAT-rate frame adds the strongest evidence yet, and it is a new kind
+
+Frame `143:1781` draws the **page heading** as `VAT Rates` where the app renders `VAT
+rates`, and the grid headers as `Rate` / `Actions`. On its own that is one more frame's
+worth of Title Case. What makes it different is what the app already ships:
+`ReferenceTabs` renders the design's Title-Case **`VAT Rates`** tab, and
+`AllowanceRatesView`'s own `H2` is **`Allowance Rates`**.
+
+So the app is already split, and split *within one view*: on `/vat-rates` a Title-Case tab
+sits directly above a sentence-case heading of the same three words, 40px apart, and the
+sibling route's heading uses the other convention. That is not a convention waiting to be
+chosen — it is two conventions already shipping in the same viewport.
+
+It stays **open** all the same, and deliberately. Page-heading case reaches every view in
+the app — Reports, the report detail, Users — so settling it inside a reference-view
+redesign would leave three headings Title Case and the rest sentence case, which is the
+same failure one scale up. What this frame changes is the **cost of leaving it open**: it is
+now visibly wrong on a shipped screen rather than only inconsistent across a spec folder,
+which is the argument for the label-case ticket going first rather than last.
+
+Note that heading case and **field-label** case may reasonably be decided differently —
+Title Case headings over sentence-case field labels is a coherent house style, and several
+are. The ticket should put the two questions separately rather than as one.
+
 ## Known design defect
 
 Frame `116:4444` declares `Instrument Sans` and renders **three** families — Instrument
