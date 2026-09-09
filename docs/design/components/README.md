@@ -44,6 +44,9 @@ source and would go stale here.
 | [`reference-tabs.md`](reference-tabs.md) | composite | design | unaudited |
 | [`rate-list-card.md`](rate-list-card.md) | composite | design | unaudited |
 | [`row-action-menu.md`](row-action-menu.md) | composite | design | unaudited |
+| [`data-grid.md`](data-grid.md) | themed primitive | design | **drifted** |
+| [`filters-bar.md`](filters-bar.md) | composite | design | none |
+| [`page-header.md`](page-header.md) | composite | design | **drifted** |
 | [`app-shell.md`](app-shell.md) | shell | design | unaudited — rebuilt in #146, Navigation rewritten in #169 |
 
 ## The two axes
@@ -177,6 +180,44 @@ a table, not that the right component was chosen for the design's intent.
 > `BigDecimalField` against a `<vaadin-text-field>` annotation, on the line editor's
 > reasoning. Label case stays **open**; this frame adds six Title Case labels to that ticket's
 > evidence. No new `--em-*` property.
+>
+> **The VAT-rate frame (`143:1781`) was surveyed next** — the sibling of the reference frame
+> `156:5396` that #169 built, targeting `VatRateView` and, through the shared
+> `ReferenceConfigView`, `ExpenseTypeView`. It added the three files above, none of which had
+> ever had one despite all three being among the app's oldest compositions: `data-grid` (the
+> app's `Grid` as the design draws it — stock Aura plus one theme variant), `filters-bar` (the
+> search-and-filter row the design puts above it, which nothing in the app builds) and
+> `page-header` (heading + primary action + intro, where `ReferenceConfigView` renders a bare
+> `H2` with no class at all).
+>
+> `filters-bar` is `none` on purpose. The other two are **drifted** for accumulated small
+> reasons rather than a structural recut: no row stripes, Vaadin's `SINGLE` selection default
+> on a grid that reads no selection, a left-aligned actions column, four inline icon buttons
+> where the frame draws a `⋮`, an unclassed heading and a 14px body-colour intro where the
+> frame draws 16px secondary.
+>
+> **Two decisions on that frame went to the app, and are settled rather than absent.** The
+> **Status column** stays, against a frame that draws only Rate and Actions: ADR-0018 keeps
+> inactive rows in the grid so an admin can reactivate them, and with no column an active and
+> an inactive rate are indistinguishable while the row's menu offers Activate *or* Deactivate.
+> The frame's own **Status filter** is the argument — a frame offering to filter by status
+> agrees status belongs on the view — so the filter is taken *and* the column kept. And the
+> percent format stays `13.5 %` against the frame's `13.5%`, because Finnish typography puts a
+> space before the unit and that is a locale rule rather than a visual choice.
+>
+> The frame's bare **"New"** button label wins over the app's "Add VAT rate"; whether the app
+> converges on "New" or "Add" for record creation is a copy convention and has its own
+> question. **Label case stays open**, and this frame is the strongest evidence yet — the app
+> already renders a Title-Case `VAT Rates` *tab* directly above a sentence-case `VAT rates`
+> *heading*, so two conventions ship in one viewport. See
+> [`../foundations/typography.md`](../foundations/typography.md).
+>
+> The survey also **decided a question `row-action-menu` had deferred**: the boundary-disabled
+> reorder actions become **disabled** `MenuItem`s rather than omitted ones, which needs an
+> `addAction(String, boolean, Runnable)` overload. And it left one **gap it refused to
+> invent**: filtering to zero rows has no designed state, and "no matches" is a different
+> component from "nothing here yet" — that belongs to `empty-state`'s owner. **No new `--em-*`
+> property; no new off-scale value.**
 
 ## Who writes these
 

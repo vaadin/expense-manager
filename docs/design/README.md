@@ -76,9 +76,11 @@ Every decision row carries one:
 | Whether the design specifies a **status callout** at all — frame `116:4444` draws a `DRAFT`, the one status the app hides it on, so it settles nothing | needs a frame drawing `REJECTED` |
 | Whether a report gains a **title** field. Ruled out of scope by the report-detail survey, so the header renders `additionalInformation` twice | closed, not deferred — reopen only with the designer |
 | Which reference route the Reference Tables pill points at when a user can reach only some of the three — it is `/vat-rates` unconditionally, and all three are ADMIN-only, so the case cannot occur yet | the shell issue |
-| Row actions behind a `⋮` menu on `VatRateView` / `ExpenseTypeView`, where reorder is boundary-disabled | the reference-view issues |
 | Whether the 20/24/28 display ramp should be design tokens rather than `--em-*` properties | the designer |
-| **Label case** — Title Case (drawn on `358:3267` and `253:10597`) or the app's sentence case; a global copy convention, refused a per-component answer twice | the label-case ticket |
+| **Label case** — Title Case (drawn on `358:3267`, `253:10597` and, for headings, `143:1781`) or the app's sentence case; a global copy convention, refused a per-component answer three times. The app already ships a Title-Case *tab* over a sentence-case *heading* of the same words on `/vat-rates`, so it is now visibly wrong rather than merely undecided | the label-case ticket |
+| **"New" against "Add"** for record creation — frame `143:1781` draws `New`, `156:5396` draws `Add`, and the app says both. A copy convention, so it is the label-case ticket's sibling rather than a per-view call | the copy-convention ticket |
+| The **zero-row state of a filtered grid** — "no matches, clear the filters" is a different component from "nothing here yet", and no frame draws either. `filters-bar` refused to invent it | `empty-state`'s owner |
+| Whether Aura's stock grid already resolves to the design's 9px radius, 32px header and 40px row, or whether three properties need overriding | the reference-view issue's verification pass |
 | Whether `report-card`'s title should follow `--em-font-size-title` to 40px, split off its own property, or take the new `--em-font-size-detail-title` (24) — a record title, on the same argument the report detail's took | the report-list issue |
 
 ## Lifecycle

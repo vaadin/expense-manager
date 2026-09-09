@@ -6,8 +6,9 @@
 **Code:** `com.vaadin.expensemanager.base.ui.RowActionMenu` (#169)
 **Design:** node `147:4473` › `Grid Buttons` (grid variant, 36×34) and `178:2029`
 (card variant, 21×34); glyph `lucide/ellipsis-vertical` at `170:7881` / `178:2033`.
-Placed on frame `156:5396` in both the rate card rows and every grid row, and on frame
-`116:4444` on **every** row of the report detail — the card variant, six placements
+Placed on frame `156:5396` in both the rate card rows and every grid row, on frame
+`143:1781` on every row of the VAT-rate grid — the grid variant, four placements — and on
+frame `116:4444` on **every** row of the report detail — the card variant, six placements
 
 ## Overview
 
@@ -69,6 +70,14 @@ trigger.setAriaLabel("Actions for " + rowLabel);
 trigger.getSubMenu().addItem("Edit", event -> openEditor(row));
 ```
 
+An action that is **unavailable on this row but available on others** takes an enabled
+flag rather than being left out — see [Reorder at the list
+boundary](#reorder-at-the-list-boundary):
+
+```java
+menu.addAction("Move up", index > 0, () -> move(row, -1));
+```
+
 `setAriaLabel` on the **trigger** is required, not optional: an icon-only button with no
 accessible name is announced as "button" and nothing else. Name the row in it — "Actions"
 alone is useless when the page has fourteen of them.
@@ -93,8 +102,9 @@ is the design's decision under ADR-0025 rather than a neutral one.
 Three places it needs watching when it lands:
 - **`VatRateView` and `ExpenseTypeView` carry four row actions each** — edit, move up,
   move down, activate/deactivate — where the reference frame's rows carry one. A menu
-  suits four better than four cramped icon buttons do, but the *boundary-disabled* reorder
-  buttons become disabled menu items, which is the case the flag note above is about.
+  suits four better than four cramped icon buttons do. The *boundary-disabled* reorder
+  buttons are now decided rather than watched: see [Reorder at the list
+  boundary](#reorder-at-the-list-boundary).
 - **The reorder buttons are the app's only affordance for row order.** Behind a menu,
   reordering becomes open-menu-click-close per step. Worth raising before the retrofit.
 - **The report detail loses a one-click edit on its largest target.** Editing a line goes
@@ -105,8 +115,35 @@ Three places it needs watching when it lands:
   was the alternative and was **not** taken — the design draws no click affordance, and
   ADR-0025 gives it the call.
 
-The first two go to the reference-view issues; the third is the report-detail redesign's,
+The second goes to the reference-view issues; the third is the report-detail redesign's,
 and is the row to check first in its visual verification.
+
+## Reorder at the list boundary
+
+`VatRateView` and `ExpenseTypeView` order their rows manually (ADR-0018), so the first row
+has no **Move up** and the last no **Move down**. Behind a menu that is a real question,
+because the frame draws one action and says nothing about four.
+
+**Decision: a disabled `MenuItem`, not an omitted one.** The menu keeps the same four items
+on every row, and the greyed item *is* the boundary information — "this row is already at
+the top" is what the user needs to know, and an item that quietly vanishes says it to
+nobody. A varying menu also moves **Activate/Deactivate** up a slot on the first and last
+rows, so the one destructive-ish action changes position depending on which row you opened.
+
+This needs an `addAction(String, boolean, Runnable)` overload on `RowActionMenu`; the
+existing two-argument form stays the common case.
+
+**What it costs, honestly.** A disabled root menu item is not focusable or hoverable
+unless the `accessibleDisabledButtons` feature flag is on, so a tooltip explaining *why* it
+is disabled cannot be attached — the user gets the greyed item and no sentence. That is the
+same limitation the **disabled** row in [States](#states) records, and it is accepted here
+rather than solved: the alternative on offer was omission, which explains even less.
+
+**Reordering through a menu is worse than reordering through a button**, and this makes it
+concrete: moving a rate three places is now open-menu → click → menu closes, three times
+over, where it used to be three clicks on a button that stayed put. It stands because
+ADR-0025 gives the frame the call on the affordance, and it is the first thing to raise if
+an admin ever complains about ordering.
 
 ## Cross-references
 
