@@ -87,7 +87,7 @@ class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
         navigate(ExpenseTypeView.class);
         int before = findGrid(ExpenseTypeDto.class).size();
 
-        findButton().withText("Add expense type").click();
+        findButton().withText("New").click();
         findTextField().withLabel("Name").setValue("Software licences");
         findComboBox(VatRateDto.class).withLabel("Default VAT rate").selectItem("25.5 %");
         findButton().withText("Save").click();
@@ -152,7 +152,7 @@ class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
         navigate(ExpenseTypeView.class);
         int before = findGrid(ExpenseTypeDto.class).size();
 
-        findButton().withText("Add expense type").click();
+        findButton().withText("New").click();
         findTextField().withLabel("Name").setValue("Software licences");
         findComboBox(VatRateDto.class).withLabel("Default VAT rate").selectItem("25.5 %");
         findButton().withText("Save").click();
@@ -244,7 +244,7 @@ class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
                 .findFirst().orElseThrow();
         service.setVatRateActive(tenPercent.id(), false);
 
-        findButton().withText("Add expense type").click();
+        findButton().withText("New").click();
 
         var suggestions = findComboBox(VatRateDto.class)
                 .withLabel("Default VAT rate").getSuggestions();
