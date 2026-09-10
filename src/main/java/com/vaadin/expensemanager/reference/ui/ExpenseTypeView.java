@@ -58,7 +58,7 @@ public class ExpenseTypeView extends ReferenceConfigView<ExpenseTypeDto> {
                         + "VAT rate a new line pre-fills. Deactivating a type hides "
                         + "it from new lines but keeps it on existing ones — nothing "
                         + "is deleted.",
-                "Add expense type", authenticationContext);
+                authenticationContext);
         this.service = service;
 
         grid.addComponentColumn(ExpenseTypeView::iconGlyph)

@@ -51,7 +51,7 @@ public class VatRateView extends ReferenceConfigView<VatRateDto> {
                         + "rate hides it from new lines but keeps it on existing "
                         + "ones — nothing is deleted, so past reports keep their "
                         + "original rate.",
-                "Add VAT rate", authenticationContext);
+                authenticationContext);
         this.service = service;
 
         grid.addColumn(dto -> formatPercent(dto.value()))

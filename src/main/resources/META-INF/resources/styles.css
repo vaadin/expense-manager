@@ -1130,6 +1130,50 @@ vaadin-context-menu-item > a[router-link] {
     font-weight: var(--aura-font-weight-semibold);
 }
 
+/* ---- The page header block ---- */
+
+/*
+ * The block that opens a full-page view (page-header.md), composed once by
+ * PageHeader: the page name at the display size, its one primary action
+ * opposite, the standing intro underneath.
+ *
+ * `.page-header` itself carries no declarations. Everything the block needs —
+ * no padding, full width, and the design's 20px gap between the title row and
+ * the intro — is spacing a layout API can express, so it goes through
+ * setPadding/setWidthFull/setSpacing (docs/theming-layouts.md). The class stays
+ * on the element as the block's name in the DOM.
+ */
+
+/*
+ * A 40px heading and a button cannot share a 360px row, and the fallback is a
+ * page-wide horizontal scrollbar — so the row wraps instead. The row-gap only
+ * applies once it has (the .allowance-toolbar precedent).
+ */
+.page-header-top {
+    flex-wrap: wrap;
+    row-gap: var(--vaadin-gap-s);
+}
+
+/*
+ * The intro is specified at a readable 16px rather than body size because it is
+ * where the consequences live, not decoration.
+ *
+ * The 1.6 leading is UNITLESS on purpose, for the same reason .page-title's 1.2
+ * is: Aura sets line-height on body as a LENGTH (--aura-line-height-m, 20px),
+ * which inherits unchanged and would come out tighter than the design's 1.6 on
+ * a 16px paragraph. --aura-line-height-l is a length too, so it would
+ * reintroduce exactly that.
+ *
+ * margin: 0 because the block gap is the layout's; a <p>'s own margin would add
+ * to it.
+ */
+.page-intro {
+    margin: 0;
+    font-size: var(--aura-font-size-l);
+    line-height: 1.6;
+    color: var(--vaadin-text-color-secondary);
+}
+
 /* ---- The tab bar ---- */
 
 /*

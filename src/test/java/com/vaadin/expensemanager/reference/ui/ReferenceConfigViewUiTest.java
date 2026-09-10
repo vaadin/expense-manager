@@ -54,7 +54,7 @@ class ReferenceConfigViewUiTest extends AbstractReferenceDataViewUiTest {
         navigate(VatRateView.class);
         int before = findGrid(VatRateDto.class).size();
 
-        findButton().withText("Add VAT rate").click();
+        findButton().withText("New").click();
         findBigDecimalField().setValue(new BigDecimal("8.5"));
         findButton().withText("Save").click();
 
@@ -88,7 +88,7 @@ class ReferenceConfigViewUiTest extends AbstractReferenceDataViewUiTest {
 
         // Always-enabled Save: submitting the empty required field surfaces the
         // top-of-form summary and writes nothing (ADR-0020).
-        findButton().withText("Add VAT rate").click();
+        findButton().withText("New").click();
         findButton().withText("Save").click();
 
         // The summary heading + the failed field's message appear in the dialog

@@ -8,6 +8,7 @@ import com.vaadin.expensemanager.allowance.DomesticPerDiemDto;
 import com.vaadin.expensemanager.allowance.ForeignPerDiemDto;
 import com.vaadin.expensemanager.base.ui.EditorDialog;
 import com.vaadin.expensemanager.base.ui.LucideIcon;
+import com.vaadin.expensemanager.base.ui.PageHeader;
 import com.vaadin.expensemanager.base.ui.ReferenceTabs;
 import com.vaadin.expensemanager.base.ui.RowActionMenu;
 import com.vaadin.flow.component.Component;
@@ -18,9 +19,7 @@ import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.grid.dataview.GridListDataView;
 import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H3;
-import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.SvgIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
@@ -47,10 +46,12 @@ import static com.vaadin.expensemanager.allowance.ui.AllowanceViewSupport.openDe
  * screens ({@code VatRateView} / {@code ExpenseTypeView}). Built to the design
  * in #169, frame {@code 156:5396}.
  *
- * <p>Top to bottom: the shared {@link ReferenceTabs} bar, the page heading and
- * intro, a bottom-ruled toolbar carrying the year selector and the two
- * year-seeding actions, the three per-year rates as one {@code rate-list-card},
- * and the foreign per-diem section — a searchable, striped, fixed-height grid.
+ * <p>Top to bottom: the shared {@link ReferenceTabs} bar, the shared
+ * {@link PageHeader} block, a bottom-ruled toolbar carrying the year selector
+ * and the two year-seeding actions, the three per-year rates as one
+ * {@code rate-list-card}, and the foreign per-diem section — a searchable,
+ * striped, fixed-height grid. Every one of them is a sibling at the 40px
+ * section gap, which is what frame {@code 156:5396} draws between them.
  *
  * <p><strong>What "Add Year" and "Copy Year" each mean.</strong> The design
  * splits one action into two, and they overlap deliberately rather than
@@ -125,30 +126,24 @@ public class AllowanceRatesView extends VerticalLayout {
             AuthenticationContext authenticationContext) {
         this.service = service;
         setPadding(true);
-        // The design's rhythm between the tab bar, the header block, the rate
-        // card and the foreign section.
+        // The design's rhythm between the tab bar, the header block, the
+        // toolbar, the rate card and the foreign section.
         setSpacing("var(--em-section-gap)");
 
-        var heading = new H2("Allowance Rates");
-        heading.addClassName("page-title");
-
-        var intro = new Paragraph(
+        // No action in the header: this view's two are seeding actions that
+        // belong to a year, so the design puts them in the toolbar instead.
+        var header = new PageHeader("Allowance Rates",
                 "The per-year rates the travel calculator costs against. History "
                         + "is kept per year — adding a new year copies the latest "
                         + "year's rates as a starting point and never changes prior "
                         + "years. Verify each figure against the Verohallinto "
                         + "decision for that year.");
 
-        var header = new VerticalLayout(heading, intro, toolbar());
-        header.setPadding(false);
-        header.setSpacing("var(--vaadin-gap-s)");
-        header.setWidthFull();
-
         rateCard.addClassName("rate-list-card");
         buildForeignSection();
 
-        add(new ReferenceTabs(getClass(), authenticationContext), header, rateCard,
-                foreignSection);
+        add(new ReferenceTabs(getClass(), authenticationContext), header, toolbar(),
+                rateCard, foreignSection);
         refreshYears(null);
     }
 
