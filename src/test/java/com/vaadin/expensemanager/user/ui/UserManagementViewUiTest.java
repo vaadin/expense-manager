@@ -1,68 +1,50 @@
 package com.vaadin.expensemanager.user.ui;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
-import com.vaadin.browserless.locator.Locators;
+import com.vaadin.expensemanager.base.AbstractUiTest;
 import com.vaadin.expensemanager.base.ui.DashboardView;
+import com.vaadin.expensemanager.base.ui.NavGroup;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
 import com.vaadin.expensemanager.user.Role;
 import com.vaadin.expensemanager.user.User;
 import com.vaadin.expensemanager.user.UserRepository;
-import com.vaadin.expensemanager.user.UserSummaryDto;
-import com.vaadin.flow.component.UI;
-import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.grid.GridLocator;
-import com.vaadin.expensemanager.base.ui.NavGroup;
 import com.vaadin.flow.spring.security.AuthenticationContext;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedCheckbox;
+import com.vaadin.testing.unified.component.UnifiedComboBox;
+import com.vaadin.testing.unified.component.UnifiedContainer;
+import com.vaadin.testing.unified.component.UnifiedGrid;
+import com.vaadin.testing.unified.component.UnifiedRadioButtonGroup;
+import com.vaadin.testing.unified.component.UnifiedTextField;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Browserless view test (pyramid layer 3, ADR-0012) for
+ * Unified UI test (pyramid layer 3, ADR-0027 proposed) for
  * {@link UserManagementView} — the ADMIN-only Users list (issue #64, ADR-0008).
+ * Runs unchanged on Browserless and Playwright.
  *
- * <p>Mirrors {@code ExpenseTypeViewUiTest}: an admin reaches the view with the
- * grid rendered and a menu entry; a plain USER is denied the route and does not
- * see the menu item; and the search box plus role/status filters narrow the rows
- * (and combine). {@code @Transactional} rolls back the extra revoked user seeded
- * for the status-filter case.
+ * <p>An admin reaches the view with the grid rendered and a menu entry; a plain
+ * USER is denied the route and does not see the menu item; the search box and the
+ * role/status filters narrow the rows (and combine); the editor promotes, revokes
+ * and refuses to revoke the last admin. The revoked user seeded for the
+ * status-filter case is committed and removed again by the
+ * {@code DatabaseSnapshotExtension}.
  */
-@SpringBootTest
-@ActiveProfiles("test")
-@Transactional
-class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators {
-
-    private static final int EMAIL_COL = 0;
-    private static final int NAME_COL = 1;
-    private static final int ROLE_COL = 2;
-    private static final int STATUS_COL = 3;
-    private static final int ACTION_COL = 4;
+class UserManagementViewUiTest extends AbstractUiTest {
 
     private static final String ADMIN_EMAIL = "admin@vaadin.com";
 
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
-
     /** Resolves the signed-in user for {@code navEntryLabels()}. */
     @Autowired
-    protected AuthenticationContext authenticationContext;
+    private AuthenticationContext authenticationContext;
 
     @Autowired
     private UserRepository userRepository;
@@ -71,188 +53,176 @@ class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void adminReachesViewWithSeededUsersRendered() {
-        navigate(UserManagementView.class);
-        var grid = findGrid(UserSummaryDto.class);
+    void adminReachesViewWithSeededUsersRendered(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
+        var grid = grid(page);
 
         // Both seeded accounts appear with their effective role and text status.
-        assertThat(columnText(grid, EMAIL_COL))
+        assertThat(grid.column("Email").getCellTexts())
                 .contains(ADMIN_EMAIL, LocalUserSeeder.PLAIN_USER_EMAIL);
-        assertThat(cellFor(grid, ADMIN_EMAIL, ROLE_COL)).isEqualTo("ADMIN");
-        assertThat(cellFor(grid, ADMIN_EMAIL, STATUS_COL)).isEqualTo("Enabled");
-        assertThat(cellFor(grid, LocalUserSeeder.PLAIN_USER_EMAIL, ROLE_COL))
-                .isEqualTo("USER");
+        assertThat(row(grid, ADMIN_EMAIL))
+                .hasCellText("Role", "ADMIN")
+                .hasCellText("Status", "Enabled");
+        assertThat(row(grid, LocalUserSeeder.PLAIN_USER_EMAIL)).hasCellText("Role", "USER");
     }
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void adminSeesMenuEntry() {
-        navigate(DashboardView.class);
+    void adminSeesMenuEntry(UnifiedPage page) {
+        page.navigate(DashboardView.class);
         assertThat(navEntryLabels()).contains("Users");
     }
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void userSeesNoMenuEntry() {
-        navigate(DashboardView.class);
+    void userSeesNoMenuEntry(UnifiedPage page) {
+        page.navigate(DashboardView.class);
         assertThat(navEntryLabels()).doesNotContain("Users");
     }
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void userCannotReachRouteByUrl() {
-        assertThatThrownBy(() -> navigate(UserManagementView.class))
-                .isInstanceOf(Exception.class);
+    void userCannotReachRouteByUrl(UnifiedPage page) {
+        page.navigate(DashboardView.class);
+        page.navigate("users");
+
+        // Denied: the Users grid and its search box never render for a plain user.
+        assertThat(page.find(UnifiedTextField.class).withLabel("Search").exists()).isFalse();
+        assertThat(page.find(UnifiedGrid.class).exists()).isFalse();
     }
 
     // ------------------------------------------------------- search & filter
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void searchNarrowsByNameOrEmail() {
-        navigate(UserManagementView.class);
+    void searchNarrowsByNameOrEmail(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
 
         // The plain user's email is user@vaadin.com; searching it excludes admin.
-        findTextField().withLabel("Search").setValue("user@");
-        var emails = columnText(findGrid(UserSummaryDto.class), EMAIL_COL);
-        assertThat(emails).containsExactly(LocalUserSeeder.PLAIN_USER_EMAIL);
+        search(page).setValue("user@");
+        assertThat(grid(page).column("Email"))
+                .hasCellTexts(LocalUserSeeder.PLAIN_USER_EMAIL);
 
         // Clearing restores the full list.
-        findTextField().withLabel("Search").setValue("");
-        assertThat(columnText(findGrid(UserSummaryDto.class), EMAIL_COL))
+        search(page).clear();
+        assertThat(grid(page)).hasRowCount(2);
+        assertThat(grid(page).column("Email").getCellTexts())
                 .contains(ADMIN_EMAIL, LocalUserSeeder.PLAIN_USER_EMAIL);
     }
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void roleFilterNarrowsRows() {
-        navigate(UserManagementView.class);
+    void roleFilterNarrowsRows(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
 
-        findComboBox(String.class).withLabel("Role").selectItem("ADMIN");
-        var roles = columnText(findGrid(UserSummaryDto.class), ROLE_COL);
-        assertThat(roles).isNotEmpty().containsOnly("ADMIN");
+        comboBox(page, "Role").selectItem("ADMIN");
+        assertThat(grid(page).column("Role")).hasCellTexts("ADMIN");
 
-        findComboBox(String.class).withLabel("Role").selectItem("USER");
-        assertThat(columnText(findGrid(UserSummaryDto.class), ROLE_COL))
-                .isNotEmpty().containsOnly("USER");
+        comboBox(page, "Role").selectItem("USER");
+        assertThat(grid(page).column("Role")).hasCellTexts("USER");
     }
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void statusFilterNarrowsRowsAndCombinesWithRole() {
+    void statusFilterNarrowsRowsAndCombinesWithRole(UnifiedPage page) {
         // Seed a revoked admin so the revoked filter has something to show.
         var revoked = new User("revoked.admin@vaadin.com", "Revoked Admin",
                 Set.of(Role.ADMIN));
         revoked.setEnabled(false);
         userRepository.saveAndFlush(revoked);
 
-        navigate(UserManagementView.class);
+        page.navigate(UserManagementView.class);
 
-        findComboBox(String.class).withLabel("Status").selectItem("Revoked");
-        var grid = findGrid(UserSummaryDto.class);
-        assertThat(columnText(grid, EMAIL_COL)).containsExactly("revoked.admin@vaadin.com");
-        assertThat(cellFor(grid, "revoked.admin@vaadin.com", STATUS_COL))
-                .isEqualTo("Revoked");
+        comboBox(page, "Status").selectItem("Revoked");
+        assertThat(grid(page).column("Email")).hasCellTexts("revoked.admin@vaadin.com");
+        assertThat(row(grid(page), "revoked.admin@vaadin.com"))
+                .hasCellText("Status", "Revoked");
 
         // Combine with a role filter that excludes the (ADMIN) revoked row.
-        findComboBox(String.class).withLabel("Role").selectItem("USER");
-        assertThat(findGrid(UserSummaryDto.class).size()).isZero();
+        comboBox(page, "Role").selectItem("USER");
+        assertThat(grid(page)).isEmpty();
     }
 
     // ------------------------------------------------------- editor write path
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void adminPromotesUserToAdminAndGridReflectsIt() {
-        navigate(UserManagementView.class);
-        var grid = findGrid(UserSummaryDto.class);
+    void adminPromotesUserToAdminAndGridReflectsIt(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
 
-        openEditorFor(grid, LocalUserSeeder.PLAIN_USER_EMAIL);
-        findRadioButtonGroup(Role.class).withLabel("Role").selectItem("ADMIN");
-        findButton().withText("Save").click();
+        openEditorFor(page, LocalUserSeeder.PLAIN_USER_EMAIL);
+        page.find(UnifiedRadioButtonGroup.class).withLabel("Role").single()
+                .selectItem("ADMIN");
+        page.find(UnifiedButton.class).withText("Save").single().click();
 
-        assertThat(cellFor(findGrid(UserSummaryDto.class),
-                LocalUserSeeder.PLAIN_USER_EMAIL, ROLE_COL)).isEqualTo("ADMIN");
+        assertThat(row(grid(page), LocalUserSeeder.PLAIN_USER_EMAIL))
+                .hasCellText("Role", "ADMIN");
     }
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void adminRevokesUserAndGridReflectsIt() {
-        navigate(UserManagementView.class);
-        var grid = findGrid(UserSummaryDto.class);
+    void adminRevokesUserAndGridReflectsIt(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
 
-        openEditorFor(grid, LocalUserSeeder.PLAIN_USER_EMAIL);
+        openEditorFor(page, LocalUserSeeder.PLAIN_USER_EMAIL);
         // The seeded user starts enabled; clearing the checkbox revokes access.
-        findCheckbox().withLabel("Account enabled").click();
-        findButton().withText("Save").click();
+        page.find(UnifiedCheckbox.class).withLabel("Account enabled").single().uncheck();
+        page.find(UnifiedButton.class).withText("Save").single().click();
 
-        assertThat(cellFor(findGrid(UserSummaryDto.class),
-                LocalUserSeeder.PLAIN_USER_EMAIL, STATUS_COL)).isEqualTo("Revoked");
+        assertThat(row(grid(page), LocalUserSeeder.PLAIN_USER_EMAIL))
+                .hasCellText("Status", "Revoked");
     }
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void guardViolationShowsErrorSummaryAndLeavesStateUnchanged() {
-        navigate(UserManagementView.class);
-        var grid = findGrid(UserSummaryDto.class);
+    void guardViolationShowsErrorSummaryAndLeavesStateUnchanged(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
 
         // The bootstrap admin is the only admin, so disabling itself is rejected.
-        openEditorFor(grid, ADMIN_EMAIL);
-        findCheckbox().withLabel("Account enabled").click();
-        findButton().withText("Save").click();
+        openEditorFor(page, ADMIN_EMAIL);
+        page.find(UnifiedCheckbox.class).withLabel("Account enabled").single().uncheck();
+        page.find(UnifiedButton.class).withText("Save").single().click();
 
-        // The error summary (in the dialog overlay) carries the guard message.
-        assertThat(UI.getCurrent().getElement().getTextRecursively())
-                .contains("last administrator");
+        // The error summary (in the dialog) carries the guard message.
+        var summary = page.find(UnifiedContainer.class).withClassName("error-summary").single();
+        assertThat(summary).isVisible();
+        assertThat(summary.element().getText()).contains("last administrator");
         // Dialog stays open (Save still present) and the grid is unchanged.
-        assertThat(findButton().withText("Save").exists()).isTrue();
-        assertThat(cellFor(findGrid(UserSummaryDto.class), ADMIN_EMAIL, STATUS_COL))
-                .isEqualTo("Enabled");
+        assertThat(page.find(UnifiedButton.class).withText("Save").single()).isVisible();
+        assertThat(row(grid(page), ADMIN_EMAIL)).hasCellText("Status", "Enabled");
     }
 
     // --------------------------------------------------------------- helpers
 
-    private void openEditorFor(GridLocator<?> grid, String email) {
-        var cell = grid.getCellComponent(rowIndexFor(grid, email), ACTION_COL);
-        test(find(Button.class, cell).withAriaLabel("Edit user " + email).single())
-                .click();
+    private static UnifiedGrid grid(UnifiedPage page) {
+        return page.find(UnifiedGrid.class).single();
     }
 
-    private static int rowIndexFor(GridLocator<?> grid, String email) {
-        for (int row = 0; row < grid.size(); row++) {
-            if (grid.getCellText(row, EMAIL_COL).equals(email)) {
-                return row;
-            }
-        }
-        throw new AssertionError("No row for " + email);
+    private static UnifiedGrid.UnifiedGridRow row(UnifiedGrid grid, String email) {
+        return grid.rows().withCellText("Email", email).single();
     }
 
-    private static List<String> columnText(GridLocator<?> grid, int column) {
-        var values = new ArrayList<String>();
-        for (int row = 0; row < grid.size(); row++) {
-            values.add(grid.getCellText(row, column));
-        }
-        return values;
+    private static UnifiedTextField search(UnifiedPage page) {
+        return page.find(UnifiedTextField.class).withLabel("Search").single();
     }
 
-    /** The cell text in {@code column} of the row whose EMAIL cell equals {@code email}. */
-    private static String cellFor(GridLocator<?> grid, String email, int column) {
-        for (int row = 0; row < grid.size(); row++) {
-            if (grid.getCellText(row, EMAIL_COL).equals(email)) {
-                return grid.getCellText(row, column);
-            }
-        }
-        throw new AssertionError("No row for " + email);
+    private static UnifiedComboBox comboBox(UnifiedPage page, String label) {
+        return page.find(UnifiedComboBox.class).withLabel(label).single();
+    }
+
+    private static void openEditorFor(UnifiedPage page, String email) {
+        // Scoped to the row's action cell (the column has an empty header).
+        row(grid(page), email).cell("").find(UnifiedButton.class)
+                .withAccessibleName("Edit user " + email).single().click();
     }
 
     /**
      * The navigation entries the signed-in user can reach, by label (#146).
      *
-     * <p>Was the {@code @Menu}-generated side-nav paths. The nav is now
-     * hand-authored in {@code NavGroup} and two of its three groups render as
-     * menus, whose items the browserless tester cannot see (F-071) — so this
-     * asks the model the shell renders from, and the rendered menu is left to
-     * visual verification.
+     * <p>Asks the model the shell renders from, as the browserless version did:
+     * two of the three nav groups render as menus whose items exist only while
+     * open (F-071). Portable as it stands — the server is in the test JVM on every
+     * Testing Tool, and {@code @WithUserDetails} sets the test thread's user.
      */
     private List<String> navEntryLabels() {
         return NavGroup.allVisibleTo(authenticationContext).stream()
