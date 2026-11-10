@@ -16,6 +16,7 @@ import com.vaadin.expensemanager.report.service.TravelDto;
 import com.vaadin.expensemanager.reference.ExpenseTypeDto;
 import com.vaadin.expensemanager.reference.VatRateDto;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
+import com.vaadin.flow.component.menubar.MenuBarTester;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasLabel;
 import com.vaadin.flow.component.UI;
@@ -1723,10 +1724,26 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * dialog's either, so asserting there silently reads as "the dialog says nothing".
      */
     private Dialog openDialogSaying(String marker) {
-        return findDialog().components().stream().filter(Dialog::isOpened)
-                .filter(dialog -> dialogText(dialog).contains(marker)).findFirst()
+        // Innermost match: since Vaadin 25.3 a dialog opened while a modal dialog is
+        // open attaches *inside* it (F-082), so the outer editor's recursive text also
+        // contains the confirm's marker. Skip any match that encloses another.
+        var matches = findDialog().components().stream().filter(Dialog::isOpened)
+                .filter(dialog -> dialogText(dialog).contains(marker)).toList();
+        return matches.stream()
+                .filter(outer -> matches.stream().noneMatch(inner -> inner != outer
+                        && isAncestor(outer, inner)))
+                .findFirst()
                 .orElseThrow(() -> new AssertionError(
                         "No open dialog says \"" + marker + "\""));
+    }
+
+    private static boolean isAncestor(Dialog outer, Dialog inner) {
+        for (var e = inner.getElement().getParent(); e != null; e = e.getParent()) {
+            if (e.equals(outer.getElement())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String dialogText(Dialog dialog) {
@@ -2493,7 +2510,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(index).as("menu item '%s' is present", action).isNotNegative();
         // Index rather than caption path: the top-level trigger is icon-only, so
         // clickItem(String...) has no root caption to match against.
-        use(menu).clickItem(0, index);
+        // The tester, not use(menu): 25.3's MenuBarLocator re-finds the menu from
+        // the UI, and a Grid cell component is not in that tree (F-082).
+        new MenuBarTester<>(menu).clickItem(0, index);
     }
 
     /** The text labels a row's ⋮ offers, in order — empty if it has no menu at all. */

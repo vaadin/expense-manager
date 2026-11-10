@@ -14,6 +14,7 @@ import com.vaadin.expensemanager.base.ui.RowActionMenu;
 import com.vaadin.expensemanager.reference.ui.ExpenseTypeView;
 import com.vaadin.expensemanager.reference.ui.VatRateView;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
+import com.vaadin.flow.component.menubar.MenuBarTester;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -443,6 +444,8 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
         assertThat(index).as("menu item '%s' is present", action).isNotNegative();
         // Index rather than caption path: the top-level trigger is icon-only, so
         // clickItem(String...) has no root caption to match against.
-        use(menu).clickItem(0, index);
+        // The tester, not use(menu): 25.3's MenuBarLocator re-finds the menu from
+        // the UI, and a Grid cell component is not in that tree (F-082).
+        new MenuBarTester<>(menu).clickItem(0, index);
     }
 }
