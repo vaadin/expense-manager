@@ -2939,3 +2939,35 @@ Deployment/Observability · UX-spec
   use, would make the question go away.
 - Owner / next step: fixed in #179; recorded in `docs/vaadin-gotchas.md` so the next
   rule or heading dropped into a `FormLayout` does not re-learn it.
+
+### F-082 — Vaadin 25.2 → 25.3 breaks two browserless test idioms: nested dialogs and `use()` on a Grid cell component
+- Date: 2026-11-10
+- Area: Vaadin
+- Severity: Medium
+- Task being attempted: bumping Vaadin 25.2.1 → 25.3.5 (and Spring Boot 4.1.0 → 4.1.1)
+  as the first commit of the unified-testing-tool spike, whose alpha BOM pins
+  Browserless Test 25.3.2. No production code changed; 5 of 583 tests went red.
+- Expected vs actual:
+  1. **Nested dialogs.** A `Dialog` opened while a modal dialog is open (the trip
+     editor's "Clear your override?" confirm) now attaches *inside* that dialog rather
+     than to the UI. The outer editor's `getElement().getTextRecursively()` therefore
+     contains the confirm's text, and a "first open dialog containing X" helper returns
+     the editor. 4 `ReportDetailViewUiTest` failures, all `expected "Clear your
+     override?" but was "Edit travel info"`.
+  2. **`use(component)` on a Grid cell component.** `use(menu)` now returns a
+     `MenuBarLocator` whose actions re-find the component by querying from the UI, and a
+     component rendered into a Grid cell is not in that tree → `NoSuchElementException:
+     No visible MenuBar in MockedUI[]`, although the test holds the instance.
+- Workaround used: (1) the helper picks the innermost matching open dialog
+  (`ReportDetailViewUiTest#openDialogSaying`); (2) `new MenuBarTester<>(menu)` instead of
+  `use(menu)` in both row-action helpers.
+- Evidence: `MenuBarLocator.clickItem` bytecode (`Locator.component()` →
+  `ComponentQuery.single()`); surefire reports for `AllowanceRatesViewUiTest`,
+  `ReportDetailViewUiTest` on 25.3.5 vs green on 25.2.1.
+- Impact: a minor-version bump turns tests red with no production change, and the
+  dialog one is a real DOM change any test (or CSS/selector) that scopes by "the open
+  dialog" can trip on. Neither is in the 25.3 release notes we found.
+- Suggested Vaadin/product improvement: note the dialog-nesting change in the upgrade
+  notes; make `use(component)` on an instance act on that instance, or fail with "this
+  component is not reachable from the UI (Grid cell?) — use the tester directly".
+- Owner / next step: fixed in the upgrade commit on `try/unified-testing-tool`.

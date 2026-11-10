@@ -33,7 +33,7 @@ fallback. Translate every one to its `--aura-*` / `--vaadin-*` equivalent.
 
 Without a fallback the property is merely invalid, so it behaves as unset — visible,
 and the lesser problem. **`LumoIcon` is not covered by any of this and is fine:** a
-supported Vaadin 25.2 icon set, on the classpath via `vaadin-lumo-theme-25.2.1.jar`,
+supported Vaadin 25 icon set, on the classpath via `vaadin-lumo-theme-25.3.5.jar`,
 and what the Figma annotations correctly prescribe. It is *defined*, which is the
 whole test. Swapping it for `VaadinIcon` on the strength of its name changes the
 rendered icon size (F-062).
