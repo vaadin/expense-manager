@@ -87,6 +87,8 @@ public class MyReportsView extends VerticalLayout implements HasHeaderState {
 
     public MyReportsView(ExpenseReportService service) {
         this.reports = service.listMine();
+        // A role name for the view's root, so a test (or a style) can scope to it.
+        addClassName("my-reports-view");
         setSizeFull();
         setPadding(true);
         setSpacing(false);

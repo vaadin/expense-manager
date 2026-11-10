@@ -3,26 +3,30 @@ package com.vaadin.expensemanager.report.ui;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Stream;
+import java.util.Objects;
 
 import com.vaadin.expensemanager.base.ui.LucideIcon;
-import com.vaadin.expensemanager.base.ui.MetricCard;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedDetails;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedMetricCard;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
-import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.SvgIcon;
 import com.vaadin.flow.router.RouterLink;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedComboBox;
+import com.vaadin.testing.unified.component.UnifiedContainer;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Browserless view test (pyramid layer 3, ADR-0012) for {@link MyReportsView}
+ * Unified UI test (pyramid layer 3, ADR-0027 proposed) for {@link MyReportsView}
  * (UC-002, redesigned in issue #162). Runs as the seeded plain user via
- * {@link WithUserDetails}.
+ * {@link WithUserDetails}, unchanged on Browserless and Playwright.
  *
  * <p>Covers the acceptance criteria the eye cannot check: owner scoping (only the
  * current user's reports render), newest-report-date-first ordering, the grouping
@@ -39,82 +43,86 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ({@code lucide/plane}, node {@code I88:12941;91:1810}), so a swap back to another
  * set is a design regression and not a matter of taste.
  *
- * <p>Assertions read the rendered text of the view or locate components by their
- * design class name (the cards are plain links, not a Grid).
+ * <p>Assertions read the view's rendered text or locate elements by their design
+ * class name (the cards are plain links, not a Grid). <strong>Section labels are
+ * compared ignoring case:</strong> {@code .section-label} is
+ * {@code text-transform: uppercase}, and a browser's text is what the user sees
+ * ("NEEDS YOUR ATTENTION") while Browserless reads the server-side string.
  */
 @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-class MyReportsViewUiTest extends AbstractReportViewUiTest {
+class MyReportsViewUiTest extends AbstractReportUiTest {
 
-    private String renderedText() {
-        return getCurrentView().getElement().getTextRecursively();
+    private static String renderedText(UnifiedPage page) {
+        return page.findComponent(MyReportsView.class).withClassName("my-reports-view")
+                .single().element().getText();
     }
 
-    private static Stream<Component> descendants(Component root) {
-        return Stream.concat(Stream.of(root),
-                root.getChildren().flatMap(MyReportsViewUiTest::descendants));
+    private static List<UnifiedMetricCard> metricCards(UnifiedPage page) {
+        return page.find(UnifiedMetricCard.class).withClassName("metric-card").all();
     }
 
-    private List<MetricCard> metricCards() {
-        return descendants((Component) getCurrentView())
-                .filter(MetricCard.class::isInstance)
-                .map(MetricCard.class::cast)
+    private static List<String> spanTexts(UnifiedPage page, String className) {
+        return page.findComponent(Span.class).withClassName(className).all().stream()
+                .map(span -> span.element().getText()).toList();
+    }
+
+    /** The Lucide symbol ids rendered anywhere on the page. */
+    private static List<String> renderedSymbols(UnifiedPage page) {
+        return page.findComponent(SvgIcon.class).all().stream()
+                .map(icon -> icon.element().getProperty("symbol"))
+                .filter(Objects::nonNull)
                 .toList();
     }
 
-    /** The Lucide symbol ids rendered anywhere under the current view. */
-    private List<String> renderedSymbols() {
-        return descendants((Component) getCurrentView())
-                .filter(SvgIcon.class::isInstance)
-                .map(SvgIcon.class::cast)
-                .map(SvgIcon::getSymbol)
-                .toList();
+    private static List<String> sectionCounts(UnifiedPage page) {
+        return spanTexts(page, "report-list-section-count");
     }
 
-    private List<String> sectionCounts() {
-        return findSpan().withClassName("report-list-section-count").components()
-                .stream().map(Span::getText).toList();
+    private static List<UnifiedDetails> sections(UnifiedPage page) {
+        return page.find(UnifiedDetails.class).withClassName("report-list-section").all();
     }
 
     @Test
-    void emptyStateRendersWhenOwnerHasNoReports() {
-        navigate(MyReportsView.class);
+    void emptyStateRendersWhenOwnerHasNoReports(UnifiedPage page) {
+        page.navigate(MyReportsView.class);
 
-        assertThat(renderedText()).contains("No expense reports yet");
+        assertThat(renderedText(page)).contains("No expense reports yet");
     }
 
     @Test
-    void theEmptyStateGlyphIsALucideSymbolFromTheSprite() {
-        navigate(MyReportsView.class);
+    void theEmptyStateGlyphIsALucideSymbolFromTheSprite(UnifiedPage page) {
+        page.navigate(MyReportsView.class);
 
         // EmptyState took a "vaadin:name" string until #163, so this asserts the
         // widened seam really carries a built icon through to the DOM.
-        var icons = descendants((Component) getCurrentView())
-                .filter(SvgIcon.class::isInstance).map(SvgIcon.class::cast).toList();
-        assertThat(icons).isNotEmpty();
-        assertThat(icons).allSatisfy(
-                icon -> assertThat(icon.getSrc()).isEqualTo(LucideIcon.SPRITE));
-        assertThat(renderedSymbols()).contains(LucideIcon.FILE_TEXT.glyph());
+        // In a browser SvgIcon's tag, <vaadin-icon>, also matches the shell's
+        // font icons, so only the symbol-bearing (sprite) icons are checked.
+        var icons = page.findComponent(SvgIcon.class).all().stream()
+                .filter(icon -> icon.element().getProperty("symbol") != null).toList();
+        assertThat(icons).isNotEmpty().allSatisfy(icon -> assertThat(
+                icon.element().getProperty("src")).isEqualTo(LucideIcon.SPRITE));
+        assertThat(renderedSymbols(page)).contains(LucideIcon.FILE_TEXT.glyph());
     }
 
     @Test
-    void theTripRowDrawsTheDesignsAnnotatedPlaneGlyph() {
+    void theTripRowDrawsTheDesignsAnnotatedPlaneGlyph(UnifiedPage page) {
         // The plane only renders on a card that actually has a trip.
-        seedReportWithTravel(LocalDate.of(2026, 8, 25),
+        fixtures.seedReportWithTravel(LocalDate.of(2026, 8, 25),
                 LocalDateTime.of(2026, 8, 25, 8, 0),
                 LocalDateTime.of(2026, 8, 27, 19, 0));
 
-        navigate(MyReportsView.class);
+        page.navigate(MyReportsView.class);
 
-        assertThat(renderedSymbols()).contains(LucideIcon.PLANE.glyph());
+        assertThat(renderedSymbols(page)).contains(LucideIcon.PLANE.glyph());
     }
 
     @Test
-    void listsOwnReportsNewestReportDateFirstWithStatusAndTotal() {
-        seedReport(LocalDate.of(2026, 6, 1), "older trip");
-        seedReport(LocalDate.of(2026, 7, 1), "newer trip");
+    void listsOwnReportsNewestReportDateFirstWithStatusAndTotal(UnifiedPage page) {
+        fixtures.seedReport(LocalDate.of(2026, 6, 1), "older trip");
+        fixtures.seedReport(LocalDate.of(2026, 7, 1), "newer trip");
 
-        navigate(MyReportsView.class);
-        var text = renderedText();
+        page.navigate(MyReportsView.class);
+        var text = renderedText(page);
 
         // Both reports, their status badge, and the derived €0.00 total render.
         assertThat(text).contains("older trip").contains("newer trip")
@@ -124,75 +132,74 @@ class MyReportsViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void statusFilterSplitsDraftFromSubmitted() {
-        seedReport(LocalDate.of(2026, 7, 1), "still a draft");
-        seedSubmittedReport(LocalDate.of(2026, 7, 2), "50.00");
-        navigate(MyReportsView.class);
+    void statusFilterSplitsDraftFromSubmitted(UnifiedPage page) {
+        fixtures.seedReport(LocalDate.of(2026, 7, 1), "still a draft");
+        fixtures.seedSubmittedReport(LocalDate.of(2026, 7, 2), "50.00");
+        page.navigate(MyReportsView.class);
 
         // Both sections show before any filter is applied.
-        assertThat(renderedText()).contains("Needs your attention").contains("Closed");
+        assertThat(renderedText(page)).containsIgnoringCase("Needs your attention")
+                .containsIgnoringCase("Closed");
 
         // Filtering by SUBMITTED leaves only the "Closed" section.
-        findComboBox(com.vaadin.expensemanager.report.domain.ReportStatus.class)
-                .withLabel("Status").selectItem("Submitted");
-        assertThat(renderedText()).contains("Closed")
-                .doesNotContain("Needs your attention")
+        comboBox(page, "Status").selectItem("Submitted");
+        assertThat(renderedText(page)).containsIgnoringCase("Closed")
+                .doesNotContainIgnoringCase("Needs your attention")
                 .doesNotContain("still a draft");
 
         // Filtering by DRAFT leaves only the "Needs your attention" section.
-        findComboBox(com.vaadin.expensemanager.report.domain.ReportStatus.class)
-                .withLabel("Status").selectItem("Draft");
-        assertThat(renderedText()).contains("Needs your attention")
+        comboBox(page, "Status").selectItem("Draft");
+        assertThat(renderedText(page)).containsIgnoringCase("Needs your attention")
                 .contains("still a draft")
-                .doesNotContain("Closed");
+                .doesNotContainIgnoringCase("Closed");
     }
 
     @Test
-    void monthAndYearFiltersNarrowTheList() {
-        seedReport(LocalDate.of(2026, 1, 15), "january");
-        seedReport(LocalDate.of(2026, 7, 15), "july");
-        seedReport(LocalDate.of(2025, 7, 15), "last july");
-        navigate(MyReportsView.class);
+    void monthAndYearFiltersNarrowTheList(UnifiedPage page) {
+        fixtures.seedReport(LocalDate.of(2026, 1, 15), "january");
+        fixtures.seedReport(LocalDate.of(2026, 7, 15), "july");
+        fixtures.seedReport(LocalDate.of(2025, 7, 15), "last july");
+        page.navigate(MyReportsView.class);
 
-        findComboBox(java.time.Month.class).withLabel("Month").selectItem("July");
+        comboBox(page, "Month").selectItem("July");
         // Both Julys remain; January is filtered out.
-        assertThat(renderedText()).contains("last july").doesNotContain("january");
+        assertThat(renderedText(page)).contains("last july").doesNotContain("january");
 
-        findComboBox(Integer.class).withLabel("Year").selectItem("2026");
+        comboBox(page, "Year").selectItem("2026");
         // July + 2026 leaves just the one report — the 2025 July drops out.
-        assertThat(renderedText()).contains("july")
+        assertThat(renderedText(page)).contains("july")
                 .doesNotContain("last july").doesNotContain("january");
     }
 
     @Test
-    void listShowsOnlyTheCurrentUsersReports() {
+    void listShowsOnlyTheCurrentUsersReports(UnifiedPage page) {
         // Another user's report seeded directly must not leak into this list.
-        seedReportForAdmin(LocalDate.of(2026, 7, 1), "admin's report");
-        seedReport(LocalDate.of(2026, 7, 2), "mine");
+        fixtures.seedReportForAdmin(LocalDate.of(2026, 7, 1), "admin's report");
+        fixtures.seedReport(LocalDate.of(2026, 7, 2), "mine");
 
-        navigate(MyReportsView.class);
+        page.navigate(MyReportsView.class);
 
-        assertThat(renderedText()).contains("mine").doesNotContain("admin's report");
+        assertThat(renderedText(page)).contains("mine").doesNotContain("admin's report");
     }
 
     @Test
-    void newReportButtonNavigatesToDetailView() {
-        navigate(MyReportsView.class);
+    void newReportButtonNavigatesToDetailView(UnifiedPage page) {
+        page.navigate(MyReportsView.class);
 
-        findButton().withText("New report").click();
+        page.find(UnifiedButton.class).withText("New report").single().click();
 
-        assertThat(getCurrentView()).isInstanceOf(ReportDetailView.class);
+        assertThat(page).isAt(ReportDetailView.class);
     }
 
     // ---- Metric band (docs/design/components/metric-card.md) ----
 
     @Test
-    void metricBandShowsZeroesRatherThanBlanksForAUserWithNoReports() {
-        navigate(MyReportsView.class);
-        var text = renderedText();
+    void metricBandShowsZeroesRatherThanBlanksForAUserWithNoReports(UnifiedPage page) {
+        page.navigate(MyReportsView.class);
+        var text = renderedText(page);
 
         // The three cards render alongside the empty state, never instead of it.
-        assertThat(metricCards()).hasSize(3);
+        assertThat(metricCards(page)).hasSize(3);
         assertThat(text).contains("No expense reports yet")
                 .contains("Needs you").contains("€0.00")
                 .contains("In flight").contains("waiting 0 days")
@@ -200,153 +207,159 @@ class MyReportsViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void metricFiguresComeFromTheServiceIncludingTheReimbursedYear() {
-        seedReport(LocalDate.of(2026, 7, 1), "a draft");
-        seedSubmittedReport(LocalDate.of(2026, 7, 2), "50.00");
+    void metricFiguresComeFromTheServiceIncludingTheReimbursedYear(UnifiedPage page) {
+        fixtures.seedReport(LocalDate.of(2026, 7, 1), "a draft");
+        fixtures.seedSubmittedReport(LocalDate.of(2026, 7, 2), "50.00");
         var metrics = service.myMetrics();
 
-        navigate(MyReportsView.class);
-        var text = renderedText();
+        page.navigate(MyReportsView.class);
 
         // The caption's year is the service's, never LocalDate.now() in the view.
-        assertThat(text).contains("Reimbursed " + metrics.reimbursedYear());
-        assertThat(findSpan().withClassName("metric-card-value").components())
-                .extracting(Span::getText)
+        assertThat(renderedText(page)).contains("Reimbursed " + metrics.reimbursedYear());
+        assertThat(spanTexts(page, "metric-card-value"))
                 .containsExactly(String.valueOf(metrics.needsYouCount()),
                         String.valueOf(metrics.inFlightCount()),
                         ReportViewSupport.formatEur(metrics.reimbursedTotal()));
     }
 
     @Test
-    void onlyTheRejectedFragmentOfTheSubLineIsCalledOut() {
-        seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "missing receipt");
-        navigate(MyReportsView.class);
+    void onlyTheRejectedFragmentOfTheSubLineIsCalledOut(UnifiedPage page) {
+        fixtures.seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "missing receipt");
+        page.navigate(MyReportsView.class);
 
         // The alert span holds the fragment alone — the "·" before it stays in the
         // sub-line's own (secondary) colour.
-        var alert = findSpan().withClassName("metric-card-sub-alert").component();
-        assertThat(alert.getText()).isEqualTo("1 rejected");
-        assertThat(alert.getParent()).get()
-                .satisfies(parent -> assertThat(parent.getElement()
-                        .getTextRecursively()).startsWith("€").contains(" · "));
+        assertThat(spanTexts(page, "metric-card-sub-alert")).containsExactly("1 rejected");
+        var subLine = spanTexts(page, "metric-card-sub").stream()
+                .filter(text -> text.contains("1 rejected")).toList();
+        assertThat(subLine).singleElement()
+                .satisfies(text -> assertThat(text).startsWith("€").contains(" · "));
     }
 
     @Test
-    void aSubLineWithNothingRejectedCarriesNoAlertFragment() {
-        seedReport(LocalDate.of(2026, 7, 1), "a draft");
-        navigate(MyReportsView.class);
+    void aSubLineWithNothingRejectedCarriesNoAlertFragment(UnifiedPage page) {
+        fixtures.seedReport(LocalDate.of(2026, 7, 1), "a draft");
+        page.navigate(MyReportsView.class);
 
-        assertThat(findSpan().withClassName("metric-card-sub-alert").exists())
-                .isFalse();
+        assertThat(page.findComponent(Span.class).withClassName("metric-card-sub-alert")
+                .exists()).isFalse();
     }
 
     @Test
-    void metricCardsAreNeitherFocusableNorClickable() {
-        seedReport(LocalDate.of(2026, 7, 1), "a draft");
-        navigate(MyReportsView.class);
+    void metricCardsAreNeitherFocusableNorClickable(UnifiedPage page) {
+        fixtures.seedReport(LocalDate.of(2026, 7, 1), "a draft");
+        page.navigate(MyReportsView.class);
 
-        assertThat(metricCards()).isNotEmpty().allSatisfy(card ->
-                assertThat(descendants(card)).allSatisfy(part -> {
-                    assertThat(part).isNotInstanceOfAny(RouterLink.class,
-                            Anchor.class, Button.class);
-                    assertThat(part.getElement().getAttribute("tabindex")).isNull();
-                }));
+        assertThat(metricCards(page)).isNotEmpty().allSatisfy(card -> {
+            assertThat(card.find(UnifiedButton.class).exists()).isFalse();
+            assertThat(card.findComponent(Anchor.class).exists()).isFalse();
+            assertThat(card.findComponent(RouterLink.class).exists()).isFalse();
+            assertThat(card.element().getAttribute("tabindex")).isNull();
+            // Any descendant: UnifiedContainer matches every element ("*"), where
+            // findComponent(Component.class) has no tag to look for in a browser.
+            assertThat(card.find(UnifiedContainer.class)
+                    .where(part -> part.getAttribute("tabindex") != null).exists())
+                    .isFalse();
+        });
     }
 
     // ---- Sections (docs/design/components/report-list-section.md) ----
 
     @Test
-    void eachSectionCarriesItsOwnCountAndThePageHeaderCarriesNone() {
-        seedReport(LocalDate.of(2026, 7, 1), "draft one");
-        seedReport(LocalDate.of(2026, 7, 2), "draft two");
-        seedSubmittedReport(LocalDate.of(2026, 7, 3), "50.00");
+    void eachSectionCarriesItsOwnCountAndThePageHeaderCarriesNone(UnifiedPage page) {
+        fixtures.seedReport(LocalDate.of(2026, 7, 1), "draft one");
+        fixtures.seedReport(LocalDate.of(2026, 7, 2), "draft two");
+        fixtures.seedSubmittedReport(LocalDate.of(2026, 7, 3), "50.00");
 
-        navigate(MyReportsView.class);
+        page.navigate(MyReportsView.class);
 
         // Singular below two, and the total that used to sit by the page title is
         // gone — two counts and a third saying "3 reports" would contradict.
-        assertThat(sectionCounts()).containsExactly("2 reports", "1 report");
-        assertThat(renderedText()).doesNotContain("3 reports");
+        assertThat(sectionCounts(page)).containsExactly("2 reports", "1 report");
+        assertThat(renderedText(page)).doesNotContain("3 reports");
     }
 
     @Test
-    void bothSectionsStartExpandedAndCollapsingOneKeepsItsCountVisible() {
-        seedReport(LocalDate.of(2026, 7, 1), "a draft");
-        seedSubmittedReport(LocalDate.of(2026, 7, 2), "50.00");
-        navigate(MyReportsView.class);
+    void bothSectionsStartExpandedAndCollapsingOneKeepsItsCountVisible(UnifiedPage page) {
+        fixtures.seedReport(LocalDate.of(2026, 7, 1), "a draft");
+        fixtures.seedSubmittedReport(LocalDate.of(2026, 7, 2), "50.00");
+        page.navigate(MyReportsView.class);
 
-        var sections = findDetails().withClassName("report-list-section").components();
-        assertThat(sections).hasSize(2).allSatisfy(
-                section -> assertThat(section.isOpened()).isTrue());
+        assertThat(sections(page)).hasSize(2)
+                .allSatisfy(section -> assertThat(section.isOpen()).isTrue());
 
-        // Locator indices are 1-based.
-        findDetails().withClassName("report-list-section").atIndex(1).closeDetails();
+        sections(page).getFirst().toggle();
 
-        assertThat(sections.get(0).isOpened()).isFalse();
+        page.waitUntil(() -> !sections(page).getFirst().isOpen());
+        assertThat(sections(page).get(1).isOpen()).isTrue();
         // The count is in the summary, so it survives the collapse — it is then
         // the only thing left saying what is inside.
-        assertThat(sectionCounts()).containsExactly("1 report", "1 report");
+        assertThat(sectionCounts(page)).containsExactly("1 report", "1 report");
     }
 
     // ---- Report card (docs/design/components/report-card.md) ----
 
     @Test
-    void aCardListsOneRowPerTripWithItsOwnDateRange() {
-        seedReportWithTravel(LocalDate.of(2026, 8, 25),
+    void aCardListsOneRowPerTripWithItsOwnDateRange(UnifiedPage page) {
+        fixtures.seedReportWithTravel(LocalDate.of(2026, 8, 25),
                 LocalDateTime.of(2026, 8, 25, 8, 0),
                 LocalDateTime.of(2026, 8, 27, 19, 0));
-        navigate(MyReportsView.class);
+        page.navigate(MyReportsView.class);
 
-        assertThat(renderedText()).contains("Helsinki")
+        assertThat(renderedText(page)).contains("Helsinki")
                 .contains("25 Aug 2026 – 27 Aug 2026");
     }
 
     @Test
-    void aSingleDayTripRepeatsTheDateRatherThanCollapsingTheRange() {
-        seedReportWithTravel(LocalDate.of(2026, 8, 25),
+    void aSingleDayTripRepeatsTheDateRatherThanCollapsingTheRange(UnifiedPage page) {
+        fixtures.seedReportWithTravel(LocalDate.of(2026, 8, 25),
                 LocalDateTime.of(2026, 8, 25, 8, 0),
                 LocalDateTime.of(2026, 8, 25, 19, 0));
-        navigate(MyReportsView.class);
+        page.navigate(MyReportsView.class);
 
-        assertThat(renderedText()).contains("25 Aug 2026 – 25 Aug 2026");
+        assertThat(renderedText(page)).contains("25 Aug 2026 – 25 Aug 2026");
     }
 
     @Test
-    void aReportWithoutTripsRendersNoTripList() {
-        seedReport(LocalDate.of(2026, 7, 1), "no travel here");
-        navigate(MyReportsView.class);
+    void aReportWithoutTripsRendersNoTripList(UnifiedPage page) {
+        fixtures.seedReport(LocalDate.of(2026, 7, 1), "no travel here");
+        page.navigate(MyReportsView.class);
 
-        assertThat(renderedText()).contains("no travel here");
-        assertThat(findSpan().withClassName("report-card-trip-dates").exists())
-                .isFalse();
+        assertThat(renderedText(page)).contains("no travel here");
+        assertThat(page.findComponent(Span.class).withClassName("report-card-trip-dates")
+                .exists()).isFalse();
     }
 
     @Test
-    void theFooterDatesTheReportsCreationRatherThanItsReportDate() {
+    void theFooterDatesTheReportsCreationRatherThanItsReportDate(UnifiedPage page) {
         // A report date deliberately far from today, so "Created on" cannot be
         // passing by coincidence.
-        seedReport(LocalDate.of(2020, 1, 2), "an old report date");
-        navigate(MyReportsView.class);
+        fixtures.seedReport(LocalDate.of(2020, 1, 2), "an old report date");
+        page.navigate(MyReportsView.class);
 
-        assertThat(renderedText()).contains("Created on " + LocalDate.now())
+        assertThat(renderedText(page)).contains("Created on " + LocalDate.now())
                 .doesNotContain("Created on 2020-01-02");
     }
 
     @Test
-    void aRejectedCardNamesWhoRejectedItAndWhen() {
-        seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "missing receipt");
-        navigate(MyReportsView.class);
+    void aRejectedCardNamesWhoRejectedItAndWhen(UnifiedPage page) {
+        fixtures.seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "missing receipt");
+        page.navigate(MyReportsView.class);
 
-        assertThat(renderedText())
+        assertThat(renderedText(page))
                 .contains("Rejected by Expense Admin on 2026-07-14");
     }
 
     @Test
-    void anUnrejectedCardCarriesNoRejectionMeta() {
-        seedSubmittedReport(LocalDate.of(2026, 7, 1), "50.00");
-        navigate(MyReportsView.class);
+    void anUnrejectedCardCarriesNoRejectionMeta(UnifiedPage page) {
+        fixtures.seedSubmittedReport(LocalDate.of(2026, 7, 1), "50.00");
+        page.navigate(MyReportsView.class);
 
-        assertThat(renderedText()).contains("Created on")
+        assertThat(renderedText(page)).contains("Created on")
                 .doesNotContain("Rejected by");
+    }
+
+    private static UnifiedComboBox comboBox(UnifiedPage page, String label) {
+        return page.find(UnifiedComboBox.class).withLabel(label).single();
     }
 }

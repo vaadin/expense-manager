@@ -1,6 +1,7 @@
 package com.vaadin.expensemanager.base;
 
 import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
@@ -24,11 +25,15 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  *       mean something else on Playwright.</li>
  * </ul>
  *
+ * <p>Tagged {@code unified}, so a browser run can select exactly these tests:
+ * {@code ./mvnw test -Dgroups=unified -Dvaadin.testing.tool=playwright}.
+ *
  * <p>Log in with Spring Security's {@code @WithUserDetails} on the method or
  * class, as before: the adapter signs the browser in through the Unified API's
  * test-only endpoint.
  */
 @UnifiedSpringBootTest
+@Tag("unified")
 @ActiveProfiles("test")
 @ExtendWith(DatabaseSnapshotExtension.class)
 public abstract class AbstractUiTest {

@@ -25,12 +25,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Shared base for the report view tests (pyramid layer 3, ADR-0012) —
- * {@link MyReportsViewUiTest} and {@link ReportDetailViewUiTest}.
+ * Browserless base for {@link ReportDetailViewUiTest} (pyramid layer 3, ADR-0012),
+ * until it moves to the Unified {@link AbstractReportUiTest} like
+ * {@link MyReportsViewUiTest} did. The seed helpers delegate to the shared
+ * {@link ReportFixtures}.
  *
  * <p>Mirrors {@code AbstractReferenceDataViewUiTest}: the singleton
  * Testcontainers Postgres (re-declared because {@link SpringBrowserlessTest}
@@ -66,22 +69,21 @@ abstract class AbstractReportViewUiTest extends SpringBrowserlessTest
     @Autowired
     protected ReferenceDataService referenceData;
 
-    /** Seeds one DRAFT report owned by the current user; returns its id. */
+    @Autowired
+    private PlatformTransactionManager transactions;
+
+    private ReportFixtures fixtures() {
+        return new ReportFixtures(service, reportRepository, userRepository, referenceData,
+                transactions);
+    }
+
     protected Long seedReport(LocalDate date, String info) {
-        var zero = BigDecimal.ZERO.setScale(2);
-        return service.create(new ReportDetailDto(null, date, info,
-                ReportStatus.DRAFT, 0L, List.of(), zero, zero, zero));
+        return fixtures().seedReport(date, info);
     }
 
     /** Seeds one DRAFT report owned by the current user with a single line. */
     protected Long seedReportWithLine(LocalDate date, String amount) {
-        var type = referenceData.activeExpenseTypes().getFirst();
-        var rate = referenceData.activeVatRates().getFirst();
-        var line = ExpenseLineDto.of(null, type.id(), type.name(), type.icon(),
-                rate.id(), rate.value(), new BigDecimal(amount), null);
-        var zero = BigDecimal.ZERO.setScale(2);
-        return service.create(new ReportDetailDto(null, date, "seed",
-                ReportStatus.DRAFT, 0L, List.of(line), zero, zero, zero));
+        return fixtures().seedReportWithLine(date, amount);
     }
 
     /**
@@ -89,9 +91,7 @@ abstract class AbstractReportViewUiTest extends SpringBrowserlessTest
      * {@code SUBMITTED} (read-only) report. Returns its id.
      */
     protected Long seedSubmittedReport(LocalDate date, String amount) {
-        var id = seedReportWithLine(date, amount);
-        service.submit(id, service.findMine(id).version());
-        return id;
+        return fixtures().seedSubmittedReport(date, amount);
     }
 
     /**
@@ -103,12 +103,7 @@ abstract class AbstractReportViewUiTest extends SpringBrowserlessTest
      * it. Returns its id.
      */
     protected Long seedRejectedReport(LocalDate date, String amount, String reason) {
-        var id = seedSubmittedReport(date, amount);
-        var admin = userRepository.findByEmail("admin@vaadin.com").orElseThrow();
-        var report = reportRepository.findById(id).orElseThrow();
-        report.reject(admin, reason, Instant.parse("2026-07-14T08:00:00Z"));
-        reportRepository.save(report);
-        return id;
+        return fixtures().seedRejectedReport(date, amount, reason);
     }
 
     /**
@@ -118,12 +113,7 @@ abstract class AbstractReportViewUiTest extends SpringBrowserlessTest
      * directly; the report stays owned by the current user. Returns its id.
      */
     protected Long seedApprovedReport(LocalDate date, String amount) {
-        var id = seedSubmittedReport(date, amount);
-        var admin = userRepository.findByEmail("admin@vaadin.com").orElseThrow();
-        var report = reportRepository.findById(id).orElseThrow();
-        report.approve(admin, Instant.parse("2026-07-14T08:00:00Z"));
-        reportRepository.save(report);
-        return id;
+        return fixtures().seedApprovedReport(date, amount);
     }
 
     /**
@@ -133,70 +123,39 @@ abstract class AbstractReportViewUiTest extends SpringBrowserlessTest
      * on truly has no lines. Returns its id.
      */
     protected Long seedEmptyRejectedReport(LocalDate date, String reason) {
-        var id = seedRejectedReport(date, "100", reason);
-        var loaded = service.findMine(id);
-        var zero = BigDecimal.ZERO.setScale(2);
-        service.update(id, new ReportDetailDto(id, loaded.reportDate(),
-                loaded.additionalInformation(), loaded.status(), loaded.version(),
-                List.of(), zero, zero, zero), loaded.version());
-        return id;
+        return fixtures().seedEmptyRejectedReport(date, reason);
     }
 
-    /** A minimal but valid JPEG (magic bytes {@code FF D8 FF} + padding). */
     protected static byte[] jpegBytes() {
-        byte[] file = new byte[16];
-        file[0] = (byte) 0xFF;
-        file[1] = (byte) 0xD8;
-        file[2] = (byte) 0xFF;
-        return file;
+        return ReportFixtures.jpegBytes();
     }
 
-    /** A minimal but valid PDF (magic bytes {@code 25 50 44 46} — {@code %PDF}). */
     protected static byte[] pdfBytes() {
-        byte[] file = new byte[16];
-        file[0] = (byte) 0x25;
-        file[1] = (byte) 0x50;
-        file[2] = (byte) 0x44;
-        file[3] = (byte) 0x46;
-        return file;
+        return ReportFixtures.pdfBytes();
     }
 
     /** Seeds a DRAFT report with one line carrying a JPEG receipt; returns its id. */
     protected Long seedReportWithReceipt(LocalDate date, String amount,
             String filename) {
-        return seedReportWithReceipt(date, amount, filename, jpegBytes());
+        return fixtures().seedReportWithReceipt(date, amount, filename);
     }
 
     /** Seeds a DRAFT report with one line carrying the given receipt bytes. */
     protected Long seedReportWithReceipt(LocalDate date, String amount,
             String filename, byte[] bytes) {
-        var type = referenceData.activeExpenseTypes().getFirst();
-        var rate = referenceData.activeVatRates().getFirst();
-        var line = ExpenseLineDto.of(null, type.id(), type.name(), type.icon(),
-                rate.id(), rate.value(), new BigDecimal(amount), null);
-        var zero = BigDecimal.ZERO.setScale(2);
-        return service.create(new ReportDetailDto(null, date, "seed",
-                ReportStatus.DRAFT, 0L, List.of(line), zero, zero, zero),
-                Map.of(0, new ReceiptUpload(bytes, filename)));
+        return fixtures().seedReportWithReceipt(date, amount, filename, bytes);
     }
 
     /** Seeds a SUBMITTED report whose single line carries a receipt. */
     protected Long seedSubmittedReportWithReceipt(LocalDate date, String amount,
             String filename) {
-        var id = seedReportWithReceipt(date, amount, filename);
-        service.submit(id, service.findMine(id).version());
-        return id;
+        return fixtures().seedSubmittedReportWithReceipt(date, amount, filename);
     }
 
     /** Seeds a DRAFT report with one domestic trip (11 h → €54.00); returns its id. */
     protected Long seedReportWithTravel(LocalDate date, LocalDateTime departure,
             LocalDateTime returnAt) {
-        var zero = BigDecimal.ZERO.setScale(2);
-        var travel = TravelDto.domestic(null, departure, returnAt, "Helsinki",
-                "Client visit", false, false, false, zero, false, zero);
-        return service.create(new ReportDetailDto(null, date, "seed",
-                ReportStatus.DRAFT, 0L, List.of(), List.of(travel), zero, zero, zero,
-                zero, zero, zero));
+        return fixtures().seedReportWithTravel(date, departure, returnAt);
     }
 
     /**
@@ -207,12 +166,7 @@ abstract class AbstractReportViewUiTest extends SpringBrowserlessTest
     protected Long seedReportWithFullTravel(LocalDate date, LocalDateTime departure,
             LocalDateTime returnAt, BigDecimal kilometres, boolean payMeal,
             BigDecimal parkingFees) {
-        var zero = BigDecimal.ZERO.setScale(2);
-        var travel = TravelDto.domestic(null, departure, returnAt, "Helsinki",
-                "Client visit", false, false, false, kilometres, payMeal, parkingFees);
-        return service.create(new ReportDetailDto(null, date, "seed",
-                ReportStatus.DRAFT, 0L, List.of(), List.of(travel), zero, zero, zero,
-                zero, zero, zero));
+        return fixtures().seedReportWithFullTravel(date, departure, returnAt, kilometres, payMeal, parkingFees);
     }
 
     /**
@@ -222,29 +176,22 @@ abstract class AbstractReportViewUiTest extends SpringBrowserlessTest
      */
     protected Long seedReportWithMealTravel(LocalDate date, LocalDateTime departure,
             LocalDateTime returnAt) {
-        var zero = BigDecimal.ZERO.setScale(2);
-        var travel = TravelDto.domestic(null, departure, returnAt, "Helsinki",
-                "Client visit", true, false, false, zero, true, zero);
-        return service.create(new ReportDetailDto(null, date, "seed",
-                ReportStatus.DRAFT, 0L, List.of(), List.of(travel), zero, zero, zero,
-                zero, zero, zero));
+        return fixtures().seedReportWithMealTravel(date, departure, returnAt);
     }
 
     /** Seeds a SUBMITTED report whose single generated line came from a trip. */
     protected Long seedSubmittedReportWithTravel(LocalDate date,
             LocalDateTime departure, LocalDateTime returnAt) {
-        var id = seedReportWithTravel(date, departure, returnAt);
-        service.submit(id, service.findMine(id).version());
-        return id;
+        return fixtures().seedSubmittedReportWithTravel(date, departure, returnAt);
     }
 
     /** The first active expense type / VAT rate, for driving the line editor. */
     protected ExpenseTypeDto firstActiveType() {
-        return referenceData.activeExpenseTypes().getFirst();
+        return fixtures().firstActiveType();
     }
 
     protected VatRateDto firstActiveRate() {
-        return referenceData.activeVatRates().getFirst();
+        return fixtures().firstActiveRate();
     }
 
     /**
@@ -253,7 +200,6 @@ abstract class AbstractReportViewUiTest extends SpringBrowserlessTest
      * views never surface it.
      */
     protected Long seedReportForAdmin(LocalDate date, String info) {
-        var admin = userRepository.findByEmail("admin@vaadin.com").orElseThrow();
-        return reportRepository.save(new ExpenseReport(admin, date, info)).getId();
+        return fixtures().seedReportForAdmin(date, info);
     }
 }
