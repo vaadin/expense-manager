@@ -210,4 +210,30 @@
             </snapshots>
         </pluginRepository>
     </pluginRepositories>
+
+    <profiles>
+        <!-- Selenium / TestBench Testing Tool, local only (ADR-0027). Activated by the
+             same switch that selects the tool, so there is nothing else to remember:
+                 ./mvnw test -Dvaadin.testing.tool=selenium
+             TestBench checks for a Vaadin license when it loads, which a developer
+             machine has and CI does not; CI never passes this value, so it never
+             resolves TestBench. Chrome is the default browser and Selenium Manager
+             fetches the matching ChromeDriver. -->
+        <profile>
+            <id>selenium</id>
+            <activation>
+                <property>
+                    <name>vaadin.testing.tool</name>
+                    <value>selenium</value>
+                </property>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.vaadin.addons</groupId>
+                    <artifactId>unified-test-selenium</artifactId>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 </project>
