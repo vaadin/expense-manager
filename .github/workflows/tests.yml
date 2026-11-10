@@ -11,8 +11,21 @@ concurrency:
 
 jobs:
   test:
-    name: Maven test (JDK 25)
+    # One run per Testing Tool (ADR-0027, proposed). Browserless runs the whole
+    # suite; Playwright runs only the Unified UI tests (tag 'unified') in a real
+    # Chromium. The Playwright leg does not block PRs while the spike settles.
+    name: Maven test (JDK 25, ${{ matrix.tool }})
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.tool == 'playwright' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [browserless, playwright]
+        include:
+          - tool: browserless
+            args: ''
+          - tool: playwright
+            args: -Dgroups=unified -Dvaadin.testing.tool=playwright
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,7 +37,23 @@ jobs:
           java-version: '25'
           cache: maven
 
+      # The Playwright version Dramafinder pins, with the OS libraries it needs.
+      - name: Install Chromium for Playwright
+        if: matrix.tool == 'playwright'
+        run: >
+          ./mvnw -B --no-transfer-progress exec:java
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.classpathScope=test
+          -Dexec.args="install --with-deps chromium"
+
       # Testcontainers spins up postgres:17-alpine via the Docker daemon,
       # which is preinstalled on ubuntu-latest runners (AbstractIntegrationTest).
       - name: Run tests
-        run: ./mvnw -B --no-transfer-progress test
+        run: ./mvnw -B --no-transfer-progress test ${{ matrix.args }}
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports-${{ matrix.tool }}
+          path: target/surefire-reports/

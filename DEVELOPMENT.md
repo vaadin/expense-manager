@@ -42,7 +42,16 @@ identically-named tool sets would make the skills' bare tool references ambiguou
 ./mvnw clean package              # Production build (JAR in target/)
 ./mvnw test                       # Run all tests
 ./mvnw test -Dtest=ClassName      # Run a single test class
+
+# Unified UI tests (tag "unified", ADR-0027 proposed) in a real Chromium
+./mvnw test -Dgroups=unified -Dvaadin.testing.tool=playwright
 ```
+
+The Unified UI tests run on Browserless by default, as part of `./mvnw test`.
+`-Dvaadin.testing.tool=playwright` runs the same tests in a browser. Playwright
+downloads its own Chromium the first time. To use a Chromium that's already
+installed, add `-Dvaadin.testing.playwright.executable=/path/to/chrome` and set
+`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`.
 
 `./mvnw` is the single documented command to run the app locally. It boots in
 the **`local`** profile (the default), and Spring Boot's Docker Compose support

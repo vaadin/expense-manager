@@ -32,5 +32,6 @@ Status values: `Accepted`, `Superseded by ADR-XXXX`, `Deprecated`.
 | [0024](0024-generated-line-quantity-override.md) | Generated lines corrected by overriding the quantity, never the amount | Accepted |
 | [0025](0025-figma-design-source-of-truth.md) | Figma is the design-system source of truth, for visual decisions only | Accepted |
 | [0026](0026-lucide-icon-set.md) | Lucide is the app's icon set, delivered as one vendored SVG sprite | Accepted |
+| [0027](0027-unified-ui-tests.md) | UI tests on the Unified API, run on Browserless and Playwright | Proposed (spike) |
 
 See also: [../glossary.md](../glossary.md) · [../plan.md](../plan.md) · [../findings.md](../findings.md)

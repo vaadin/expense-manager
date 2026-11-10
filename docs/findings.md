@@ -2971,3 +2971,131 @@ Deployment/Observability · UX-spec
   notes; make `use(component)` on an instance act on that instance, or fail with "this
   component is not reachable from the UI (Grid cell?) — use the tester directly".
 - Owner / next step: fixed in the upgrade commit on `try/unified-testing-tool`.
+
+### F-083 — `@Transactional` test rollback means one thing on Browserless and another in a browser, and the Unified API says nothing
+- Date: 2026-11-10
+- Area: Verification
+- Severity: High
+- Task being attempted: porting layer-3 UI tests to the Unified API (ADR-0027,
+  proposed) so the same test runs on Browserless and on Playwright.
+- Expected vs actual: every UI test base used `@Transactional` so a test's seed data
+  rolls back. Under `@UnifiedSpringBootTest` that still "works" on Browserless: the
+  view runs on the test thread, inside the transaction. On Playwright the view runs
+  on a server request thread, so it cannot see the test's uncommitted seed data, and
+  anything the UI commits is never rolled back. Same test, two meanings, no warning;
+  neither the spec (02-test-setup) nor the code mentions transactions.
+- Workaround used: no test transaction at all. `DatabaseSnapshotExtension` copies
+  every table into a `test_snapshot` schema once per JVM (after boot, so Flyway and
+  `LocalUserSeeder` have run) and restores it after each test with
+  `session_replication_role = replica`. Side effect: seeds that touch a lazy
+  aggregate collection outside a service need their own `TransactionTemplate`
+  (`ReportFixtures#seedRejectedReport` hit `LazyInitializationException`).
+- Evidence: `base/DatabaseSnapshotExtension.java`; `report/ui/ReportFixtures.java`;
+  both spike classes green on both tools with no `@Transactional`.
+- Impact: the commonest Spring test idiom silently splits a "write once" suite.
+  Whoever migrates a Spring app hits it first, and only on the browser run.
+- Suggested Vaadin/product improvement: document data isolation in the spec, fail
+  fast on a `@Transactional` `@UnifiedSpringBootTest` browser run, and consider
+  shipping a reset extension. Drafted upstream as U-1 in
+  `docs/unified-testing-upstream-issues.md`.
+- Owner / next step: user files U-1; ADR-0027 records the snapshot approach.
+
+### F-084 — Under `@UnifiedSpringBootTest`, Browserless still finds routes only in the test class's package
+- Date: 2026-11-10
+- Area: Tooling/Template
+- Severity: Medium
+- Task being attempted: `UserManagementViewUiTest` (package `user.ui`) navigating to
+  `DashboardView` (package `base.ui`).
+- Expected vs actual: expected the Spring context to provide the routes, as
+  `SpringBrowserlessTest` did and as the spec's "App built in the test JVM from the
+  Spring context" suggests. Actual: `NotFound: No route found for the given
+  navigation target 'DashboardView'` — `vaadin.testing.browserless.view-packages`
+  defaults to the test class's package even for Spring apps. Playwright, of course,
+  sees every route.
+- Workaround used: `src/test/resources/junit-platform.properties` sets
+  `vaadin.testing.browserless.view-packages=com.vaadin.expensemanager`.
+- Evidence: first Browserless run of `UserManagementViewUiTest`, 3 errors.
+- Impact: a portability gap in the wrong direction — the Browserless run fails where
+  the browser run passes — and the first thing a new user meets.
+- Suggested Vaadin/product improvement: under Spring, default to the application's
+  base package. Upstream U-2.
+- Owner / next step: user files U-2.
+
+### F-085 — A page-wide lookup misses a button inside a Grid cell on Browserless only
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Medium
+- Task being attempted: opening the user editor with
+  `page.find(UnifiedButton.class).withAccessibleName("Edit user …").single()`.
+- Expected vs actual: expected the button rendered in the Grid's action column, which
+  a browser finds. Browserless timed out after 10 s: "No component matches". Scoped
+  to the row's cell — `row.cell("").find(UnifiedButton.class)…` — it is found on both
+  tools. Same family as F-082: a component rendered into a Grid cell is not in the
+  component tree a UI-rooted query walks.
+- Workaround used: always reach cell content through `grid.rows()…cell(header)`.
+- Evidence: `UserManagementViewUiTest#openEditorFor`.
+- Impact: a test that passes in a browser fails on Browserless, and the error does
+  not say "this is inside a Grid".
+- Suggested Vaadin/product improvement: include Grid cell components in Browserless
+  page-wide queries, or name the cause in the failure. Upstream U-3.
+- Owner / next step: user files U-3.
+
+### F-086 — `getText()` is `innerText` in a browser and the server string on Browserless, so CSS `text-transform` splits them
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Low
+- Task being attempted: `MyReportsViewUiTest` asserting the "Needs your attention" /
+  "Closed" section labels in the view's text.
+- Expected vs actual: `.section-label` is `text-transform: uppercase`. Playwright's
+  `getText()` is `innerText`, which applies it ("NEEDS YOUR ATTENTION"); Browserless
+  returns the server-side string. An exact `contains` passes on one tool only.
+- Workaround used: `containsIgnoringCase` for those labels, explained in the class
+  Javadoc.
+- Evidence: `PlaywrightElement#getText` (`locator.innerText()`) vs
+  `BrowserlessElement#getText` (`getTextRecursively()`).
+- Impact: small, but it is exactly the kind of difference "write once" promises away;
+  any `text-transform`, `::before` content or hidden text will diverge the same way.
+- Suggested Vaadin/product improvement: specify which text `getText()` means and make
+  both adapters agree (`textContent`, or document the divergence). Upstream U-4.
+- Owner / next step: user files U-4.
+
+### F-087 — On Playwright, class-name and attribute filters run in Java one element at a time: `UnifiedContainer.withClassName` costs seconds
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Medium
+- Task being attempted: the first Playwright run of `MyReportsViewUiTest`.
+- Expected vs actual: 180 s for 21 tests, single tests up to 26 s. The adapter puts
+  only id and test-id into the CSS selector; every other filter (class name,
+  attribute, theme, `where`) is checked per candidate with a browser round trip.
+  `UnifiedContainer` has tag `*`, so `withClassName("my-reports-view")` visits every
+  element on the page.
+- Workaround used: query by the real tag — `findComponent(MyReportsView.class)` (the
+  inherited `@Tag` gives `vaadin-vertical-layout`), `findComponent(Span.class)`, a
+  `UnifiedMetricCard` wrapper. Same 21 tests: **54 s**.
+- Evidence: `PlaywrightSession#find`; per-test surefire timings before and after.
+- Impact: the natural way to scope by a design class is the slow one, and nothing
+  hints why a browser run takes minutes.
+- Suggested Vaadin/product improvement: push class-name, attribute and theme filters
+  into the selector (`[class~=…]`, `[attr="…"]`). Upstream U-5.
+- Owner / next step: user files U-5.
+
+### F-088 — A custom wrapper can't constrain its own browser query, and `findComponent(Component.class)` fails only in a browser
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Low
+- Task being attempted: project wrappers for `MetricCard` (a `VerticalLayout`) and a
+  "no descendant has tabindex" check.
+- Expected vs actual: (1) `@UnifiedComponent(MetricCard.class)` matches by class on
+  Browserless but by tag in a browser — every `<vaadin-vertical-layout>` — and a
+  wrapper has no way to add a default filter, so each call site must remember
+  `.withClassName("metric-card")`. (2) `findComponent(Component.class)` works on
+  Browserless and throws "has no @Tag" on Playwright.
+- Workaround used: (1) the filter at each call site, noted on the wrapper; (2)
+  `find(UnifiedContainer.class).where(…)`.
+- Evidence: `base/ui/unified/UnifiedMetricCard.java`;
+  `MyReportsViewUiTest#metricCardsAreNeitherFocusableNorClickable`.
+- Impact: both pass on Browserless and break on the browser run — the direction that
+  costs most, since Browserless is the run developers use locally.
+- Suggested Vaadin/product improvement: a `selector`/default-filter on
+  `@UnifiedComponent`; and validate tag-less queries up front on every tool. Upstream U-6.
+- Owner / next step: user files U-6.
