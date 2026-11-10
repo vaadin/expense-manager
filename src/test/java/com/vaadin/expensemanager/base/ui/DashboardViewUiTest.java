@@ -1,45 +1,42 @@
 package com.vaadin.expensemanager.base.ui;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
+import com.vaadin.expensemanager.base.AbstractUiTest;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedMenuBar;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
-import com.vaadin.flow.component.menubar.MenuBar;
+import com.vaadin.flow.component.html.Main;
+import com.vaadin.testing.unified.UnifiedPage;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
-import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Server-side view test (pyramid layer 3, ADR-0012) for the role-aware dashboard
- * and shell header (UC-007, ADR-0017), driven with the browserless tester.
+ * Unified UI test (pyramid layer 3, ADR-0027 proposed) for the role-aware dashboard
+ * and shell header (UC-007, ADR-0017). Runs unchanged on Browserless and Playwright.
  *
  * <p>Verifies the acceptance criteria: the dashboard greets the user by name and
  * renders role-appropriate content that differs for ADMIN vs USER, and
  * {@link MainLayout}'s header shows the current-user identity plus a working
  * logout action. Authenticates as the seeded admin and plain user via
  * {@link WithUserDetails} — the same records the form-stub logs in.
+ *
+ * <p>The dashboard's text is read from the shell's {@code <main>} content column,
+ * which holds nothing but the routed view: {@code DashboardView} is a bare
+ * {@code VerticalLayout}, a tag every block on a page shares (F-088). The avatar
+ * menu is read through {@link UnifiedMenuBar}, which opens it in a browser — its
+ * items exist only while open — and reads the server model on Browserless.
  */
-@SpringBootTest
-@ActiveProfiles("test")
-class DashboardViewUiTest extends SpringBrowserlessTest {
-
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
+class DashboardViewUiTest extends AbstractUiTest {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void adminSeesAdminGreetingAndContent() {
-        var dashboard = navigate(DashboardView.class);
+    void adminSeesAdminGreetingAndContent(UnifiedPage page) {
+        page.navigate(DashboardView.class);
+        assertThat(page).isAt(DashboardView.class);
+        screenshot(page, "admin-dashboard");
 
-        var text = textOf(dashboard);
+        var text = dashboardText(page);
         assertThat(text).contains("Welcome, Expense Admin");
         assertThat(text).contains("administrator");
         assertThat(text).doesNotContain("signed in as a user");
@@ -47,10 +44,12 @@ class DashboardViewUiTest extends SpringBrowserlessTest {
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void userSeesUserGreetingAndContent() {
-        var dashboard = navigate(DashboardView.class);
+    void userSeesUserGreetingAndContent(UnifiedPage page) {
+        page.navigate(DashboardView.class);
+        assertThat(page).isAt(DashboardView.class);
+        screenshot(page, "user-dashboard");
 
-        var text = textOf(dashboard);
+        var text = dashboardText(page);
         assertThat(text).contains("Welcome, Demo User");
         assertThat(text).contains("signed in as a user");
         assertThat(text).doesNotContain("administrator");
@@ -63,25 +62,23 @@ class DashboardViewUiTest extends SpringBrowserlessTest {
      */
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void headerShowsIdentityAndLogout() {
-        navigate(DashboardView.class);
+    void headerShowsIdentityAndLogout(UnifiedPage page) {
+        page.navigate(DashboardView.class);
 
-        var accountMenu = $(MenuBar.class).all().stream()
-                .flatMap(bar -> bar.getItems().stream())
-                .flatMap(item -> item.getSubMenu().getItems().stream())
-                .toList();
+        var accountMenu = page.find(UnifiedMenuBar.class).single().openSubMenu(0);
+        screenshot(page, "account-menu-open");
 
-        assertThat(accountMenu).extracting(item -> item.getElement().getTextRecursively())
+        assertThat(accountMenu).extracting(UnifiedMenuBar.Item::text)
                 .contains("Demo User", "Sign out");
 
         var signOut = accountMenu.stream()
-                .filter(item -> "Sign out".equals(item.getElement().getTextRecursively()))
+                .filter(item -> "Sign out".equals(item.text()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("No 'Sign out' item in the shell"));
-        assertThat(signOut.isEnabled()).isTrue();
+        assertThat(signOut.enabled()).isTrue();
     }
 
-    private static String textOf(DashboardView root) {
-        return root.getElement().getTextRecursively();
+    private static String dashboardText(UnifiedPage page) {
+        return page.findComponent(Main.class).single().element().getText();
     }
 }

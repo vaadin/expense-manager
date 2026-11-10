@@ -1,105 +1,113 @@
 package com.vaadin.expensemanager.allowance.ui;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
-import com.vaadin.browserless.locator.Locators;
 import com.vaadin.expensemanager.allowance.AllowanceRateService;
-import com.vaadin.expensemanager.allowance.ForeignPerDiemDto;
+import com.vaadin.expensemanager.base.AbstractUiTest;
 import com.vaadin.expensemanager.base.ui.DashboardView;
-import com.vaadin.expensemanager.base.ui.ErrorSummary;
 import com.vaadin.expensemanager.base.ui.ReferenceTabs;
-import com.vaadin.expensemanager.base.ui.RowActionMenu;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedBigDecimalField;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedDiv;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedIntegerField;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedMenuBar;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedTabs;
 import com.vaadin.expensemanager.reference.ui.ExpenseTypeView;
 import com.vaadin.expensemanager.reference.ui.VatRateView;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
-import com.vaadin.flow.component.menubar.MenuBarTester;
-import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.contextmenu.MenuItem;
 import com.vaadin.flow.component.grid.GridVariant;
-import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.router.RouterLink;
 import com.vaadin.flow.spring.security.AuthenticationContext;
+import com.vaadin.testing.unified.Scope;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.UnifiedWrapper;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedComboBox;
+import com.vaadin.testing.unified.component.UnifiedGenericComponent;
+import com.vaadin.testing.unified.component.UnifiedGrid;
+import com.vaadin.testing.unified.component.UnifiedTextField;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Browserless view test (pyramid layer 3, ADR-0012) for
+ * Unified UI test (pyramid layer 3, ADR-0027 proposed) for
  * {@link AllowanceRatesView} — the ADMIN-only allowance-rate settings screen
- * (issue #48, redesigned to frame {@code 156:5396} in #169).
+ * (issue #48, redesigned to frame {@code 156:5396} in #169). Runs unchanged on
+ * Browserless and Playwright.
  *
  * <p>Drives the tab bar, the toolbar, the rate card's ⋮ menus, the searchable
  * foreign per-diem grid and both year-seeding editors as an admin would. Access
- * control mirrors the reference-data screens. The singleton Testcontainers
- * Postgres and {@code @Transactional} rollback follow
- * {@code AbstractReferenceDataViewUiTest} (F-008: {@link SpringBrowserlessTest}
- * occupies the inheritance slot).
+ * control mirrors the reference-data screens. Saved state is checked through
+ * {@link AllowanceRateService}, which is in the test JVM on every tool, and the
+ * {@code DatabaseSnapshotExtension} puts every committed write back afterwards.
+ *
+ * <p><strong>Tool differences this class is written around.</strong>
+ * <ul>
+ *   <li>A component in a Grid cell is reached only through
+ *       {@code row.cell("Actions")} (F-085); a page-wide lookup sees it in a
+ *       browser only. So the "every item is text-labelled" check covers the rate
+ *       card's menus plus one grid row's, the same set on both tools.</li>
+ *   <li>The ⋮ menus go through {@link UnifiedMenuBar}: in a browser it opens the
+ *       sub-menu to read and click it, on Browserless it uses the tester.</li>
+ *   <li>The year selector is found by its {@code accessibleName} property, not
+ *       {@code withAccessibleName("Year")}, which matches in a browser only: Flow's
+ *       {@code setAriaLabel} on a field sets that property, and Browserless looks
+ *       for an {@code aria-label} attribute on the host.</li>
+ *   <li>Sizes are read from the inline {@code style} attribute, which Flow writes
+ *       as {@code width:180px} and the browser serialises as
+ *       {@code width: 180px;} — compared with whitespace and {@code ;} stripped.</li>
+ * </ul>
  *
  * <p><strong>What is deliberately not here.</strong> Whether the dotted rules,
- * the 40px heading, the tab pill and the 512px grid actually <em>look</em> right
- * is not something a browserless tree can judge, and neither is a 3% Aura hover
- * overlay. This class asserts the structure and the behaviour; appearance goes
- * to visual verification against the frame.
+ * the 40px heading, the tab pill and the 512px grid actually <em>look</em> right,
+ * or a 3% Aura hover overlay. This class asserts the structure and the behaviour;
+ * appearance goes to visual verification against the frame (screenshots with
+ * {@code -Dui.screenshots=true} on Playwright help with that).
  */
-@SpringBootTest
-@ActiveProfiles("test")
-@Transactional
-class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators {
+class AllowanceRatesViewUiTest extends AbstractUiTest {
 
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
+    private static final String ADMIN_EMAIL = "admin@vaadin.com";
 
     /** Resolves the signed-in user for the tab bar's access filter. */
     @Autowired
-    protected AuthenticationContext authenticationContext;
+    private AuthenticationContext authenticationContext;
 
     @Autowired
     private AllowanceRateService service;
 
-    private static final int COUNTRY_COL = 0;
-    private static final int AMOUNT_COL = 1;
-    private static final int ACTIONS_COL = 2;
-
     // ------------------------------------------------------- access control
 
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void adminReachesViewWithSeeded2026Rendered() {
-        navigate(AllowanceRatesView.class);
+    @WithUserDetails(ADMIN_EMAIL)
+    void adminReachesViewWithSeeded2026Rendered(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
+        screenshot(page, "seeded-2026");
 
-        assertThat(findComboBox(Integer.class).getSelected()).isEqualTo(2026);
+        assertThat(yearSelector(page).getSelectedItem()).isEqualTo("2026");
 
-        var grid = findGrid(ForeignPerDiemDto.class);
-        assertThat(grid.size()).isEqualTo(12);
-        assertThat(grid.getCellText(0, COUNTRY_COL)).isEqualTo("Belgium");
-        assertThat(grid.getCellText(9, COUNTRY_COL)).isEqualTo("Sweden");
-        assertThat(grid.getCellText(9, AMOUNT_COL)).isEqualTo("€68.00");
+        var grid = grid(page);
+        assertThat(grid).hasRowCount(12);
+        assertThat(grid.row(0).getCellText("Country")).isEqualTo("Belgium");
+        assertThat(grid.row(9).getCellText("Country")).isEqualTo("Sweden");
+        assertThat(grid.row(9).getCellText("Per-diem")).isEqualTo("€68.00");
     }
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void userCannotReachRouteByUrl() {
-        assertThatThrownBy(() -> navigate(AllowanceRatesView.class))
-                .isInstanceOf(Exception.class);
+    void userCannotReachRouteByUrl(UnifiedPage page) {
+        page.navigate(DashboardView.class);
+        page.navigate("allowance-rates");
+
+        // Denied: neither the year selector nor the per-diem grid renders.
+        assertThat(page.find(UnifiedComboBox.class).exists()).isFalse();
+        assertThat(page.find(UnifiedGrid.class).exists()).isFalse();
     }
 
     // ---------------------------------------------------------- the tab bar
@@ -110,33 +118,29 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      * into two of the three — hence links rather than a selection listener.
      */
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void theTabBarLinksToAllThreeReferenceRoutes() {
-        navigate(AllowanceRatesView.class);
-        var tabs = $(ReferenceTabs.class).single();
+    @WithUserDetails(ADMIN_EMAIL)
+    void theTabBarLinksToAllThreeReferenceRoutes(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
+        screenshot(page, "tab-bar");
 
-        assertThat(tabLinks(tabs))
-                .extracting(RouterLink::getText)
+        var links = tabLinks(page);
+        assertThat(links).extracting(link -> link.element().getText())
                 .containsExactly("VAT Rates", "Expense Types", "Allowance Rates");
-        assertThat(tabLinks(tabs))
-                .extracting(RouterLink::getHref)
+        assertThat(links).extracting(link -> link.element().getAttribute("href"))
                 .containsExactly("vat-rates", "expense-types", "allowance-rates");
     }
 
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void theCurrentRoutesTabIsSelectedAndItsLinkIsAriaCurrent() {
-        navigate(AllowanceRatesView.class);
-        var tabs = $(ReferenceTabs.class).single();
+    @WithUserDetails(ADMIN_EMAIL)
+    void theCurrentRoutesTabIsSelectedAndItsLinkIsAriaCurrent(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
-        assertThat(tabs.getSelectedTab().getElement().getTextRecursively())
-                .isEqualTo("Allowance Rates");
+        assertThat(tabs(page).getSelectedTabText()).isEqualTo("Allowance Rates");
         // aria-current is the half a screen reader reads; the selected pill is the
         // sighted half of the same fact, and it goes on the LINK, not the Tab.
-        assertThat(tabLinks(tabs).stream()
-                .filter(link -> "page".equals(
-                        link.getElement().getAttribute("aria-current")))
-                .map(RouterLink::getText))
+        assertThat(tabLinks(page).stream()
+                .filter(link -> "page".equals(link.element().getAttribute("aria-current")))
+                .map(link -> link.element().getText()))
                 .containsExactly("Allowance Rates");
     }
 
@@ -144,11 +148,17 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      * A route the user cannot reach renders no tab at all, rather than a greyed
      * one (ADR-0008). All three views are ADMIN-only today, so the bar is
      * all-or-nothing — this is what keeps that true when one of them opens up.
+     *
+     * <p>Builds the bar directly, as before: no view a plain user can reach hosts
+     * it. Portable as it stands — the component is built in the test JVM, and the
+     * access filter reads the test thread's {@code @WithUserDetails} user; it
+     * builds no {@code RouterLink} (which would need a running UI) because the
+     * user can reach none of the routes.
      */
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void aUserWhoCannotReachARouteGetsNoTabForIt() {
-        navigate(DashboardView.class);
+    void aUserWhoCannotReachARouteGetsNoTabForIt(UnifiedPage page) {
+        page.navigate(DashboardView.class);
 
         var tabs = new ReferenceTabs(VatRateView.class, authenticationContext);
 
@@ -158,15 +168,13 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
 
     /** The bar is shared: the other two reference views host the same component. */
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void theOtherTwoReferenceViewsHostTheSameBarWithTheirOwnTabSelected() {
-        navigate(VatRateView.class);
-        assertThat($(ReferenceTabs.class).single().getSelectedTab().getElement()
-                .getTextRecursively()).isEqualTo("VAT Rates");
+    @WithUserDetails(ADMIN_EMAIL)
+    void theOtherTwoReferenceViewsHostTheSameBarWithTheirOwnTabSelected(UnifiedPage page) {
+        page.navigate(VatRateView.class);
+        assertThat(tabs(page).getSelectedTabText()).isEqualTo("VAT Rates");
 
-        navigate(ExpenseTypeView.class);
-        assertThat($(ReferenceTabs.class).single().getSelectedTab().getElement()
-                .getTextRecursively()).isEqualTo("Expense Types");
+        page.navigate(ExpenseTypeView.class);
+        assertThat(tabs(page).getSelectedTabText()).isEqualTo("Expense Types");
     }
 
     // ----------------------------------------------------------- the toolbar
@@ -176,25 +184,25 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      * no visible label, so it must carry an accessible name instead.
      */
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void theToolbarSelectorIsUnlabelledButNamed() {
-        navigate(AllowanceRatesView.class);
-        var selector = findComboBox(Integer.class).getComponent();
+    @WithUserDetails(ADMIN_EMAIL)
+    void theToolbarSelectorIsUnlabelledButNamed(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
+        // Found by its accessible name: that is the "named" half of the contract.
+        var selector = yearSelector(page);
 
         assertThat(selector.getLabel()).isNull();
-        assertThat(selector.getAriaLabel()).contains("Year");
-        assertThat(selector.getWidth()).isEqualTo("180px");
+        assertThat(inlineStyle(selector)).contains("width:180px");
     }
 
     /** Both are tertiary: with two side by side, neither is the page's loud action. */
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void bothYearActionsAreTertiary() {
-        navigate(AllowanceRatesView.class);
+    @WithUserDetails(ADMIN_EMAIL)
+    void bothYearActionsAreTertiary(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
-        assertThat(findButton().withText("Copy Year").component().getThemeNames())
+        assertThat(themeNames(button(page, "Copy Year")))
                 .contains(ButtonVariant.TERTIARY.getVariantName());
-        assertThat(findButton().withText("Add Year").component().getThemeNames())
+        assertThat(themeNames(button(page, "Add Year")))
                 .contains(ButtonVariant.TERTIARY.getVariantName());
     }
 
@@ -205,33 +213,28 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      * amounts, separated by the dot.
      */
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void theThreeRatesRenderAsOneCardWithTheDomesticRowCarryingTwoValues() {
-        navigate(AllowanceRatesView.class);
+    @WithUserDetails(ADMIN_EMAIL)
+    void theThreeRatesRenderAsOneCardWithTheDomesticRowCarryingTwoValues(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
+        screenshot(page, "rate-card");
 
-        var card = $(Div.class).withClassName("rate-list-card").single();
-        var rows = card.getChildren().toList();
+        var rows = rateRows(page);
         assertThat(rows).hasSize(3);
-        assertThat(rows).allSatisfy(row -> assertThat(
-                row.getElement().getClassList()).contains("rate-row"));
 
-        assertThat(rows).extracting(row -> titleOf(row))
+        assertThat(rows).extracting(AllowanceRatesViewUiTest::titleOf)
                 .containsExactly("Domestic per Diem", "Kilometre Allowance",
                         "Meal Allowance");
 
         var domestic = rows.get(0);
-        assertThat(find(Span.class, domestic).withClassName("rate-row-value").all())
-                .hasSize(2);
-        assertThat(find(Span.class, domestic).withClassName("rate-row-dot").all())
-                .hasSize(1);
-        assertThat(domestic.getElement().getTextRecursively())
+        assertThat(spans(domestic, "rate-row-value")).hasSize(2);
+        assertThat(spans(domestic, "rate-row-dot")).hasSize(1);
+        assertThat(domestic.getText())
                 .contains("Full day (over 10h)", "€54.00",
                         "Partial day (over 6h)", "€25.00");
 
         // The single-value rows carry one value and no dot.
-        assertThat(find(Span.class, rows.get(1)).withClassName("rate-row-dot").exists())
-                .isFalse();
-        assertThat(rows.get(2).getElement().getTextRecursively()).contains("€13.50");
+        assertThat(spans(rows.get(1), "rate-row-dot")).isEmpty();
+        assertThat(rows.get(2).getText()).contains("€13.50");
     }
 
     // ------------------------------------------------------ row action menus
@@ -242,52 +245,55 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      * as "button" and nothing else.
      */
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void everyRowActionSitsBehindANamedEllipsisMenu() {
-        navigate(AllowanceRatesView.class);
+    @WithUserDetails(ADMIN_EMAIL)
+    void everyRowActionSitsBehindANamedEllipsisMenu(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
-        assertThat($(RowActionMenu.class).all())
+        var cardMenus = rateCard(page).find(UnifiedMenuBar.class).all();
+        assertThat(cardMenus)
                 .extracting(AllowanceRatesViewUiTest::triggerName)
-                .contains("Actions for Domestic per Diem",
+                .containsExactly("Actions for Domestic per Diem",
                         "Actions for Kilometre Allowance",
                         "Actions for Meal Allowance");
 
-        // Every item in every menu carries text, never an icon alone (ADR-0020).
-        assertThat($(RowActionMenu.class).all()).allSatisfy(menu ->
-                assertThat(menu.getItems().get(0).getSubMenu().getItems())
-                        .isNotEmpty()
-                        .allSatisfy(item -> assertThat(item.getText()).isNotBlank()));
+        var swedenMenu = gridRowMenu(page, "Sweden");
+        assertThat(triggerName(swedenMenu)).isEqualTo("Actions for Sweden");
 
-        var grid = findGrid(ForeignPerDiemDto.class);
-        var cell = grid.getCellComponent(9, ACTIONS_COL);
-        assertThat(triggerName(find(RowActionMenu.class, cell).single()))
-                .isEqualTo("Actions for Sweden");
+        // Every item in every menu carries text, never an icon alone (ADR-0020).
+        var menus = new ArrayList<>(cardMenus);
+        menus.add(swedenMenu);
+        assertThat(menus).allSatisfy(menu ->
+                assertThat(menu.getSubMenuItemTexts(0))
+                        .isNotEmpty()
+                        .allSatisfy(text -> assertThat(text).isNotBlank()));
     }
 
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void editingARateThroughItsMenuPersists() {
-        navigate(AllowanceRatesView.class);
+    @WithUserDetails(ADMIN_EMAIL)
+    void editingARateThroughItsMenuPersists(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
-        clickRowAction(rateRowMenu("Meal Allowance"), "Edit");
-        findBigDecimalField().withLabel("Amount (€)").setValue(new BigDecimal("15"));
-        findButton().withText("Save").click();
+        rateRowMenu(page, "Meal Allowance").clickSubMenuItem(0, "Edit");
+        screenshot(page, "meal-editor");
+        amountField(page).setValue(new BigDecimal("15"));
+        button(page, "Save").click();
 
         assertThat(service.mealAllowance(2026).orElseThrow().amount())
                 .isEqualByComparingTo("15.00");
     }
 
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void editingAForeignPerDiemThroughItsGridMenuPersists() {
-        navigate(AllowanceRatesView.class);
-        var cell = findGrid(ForeignPerDiemDto.class)
-                .getCellComponent(9, ACTIONS_COL);
+    @WithUserDetails(ADMIN_EMAIL)
+    void editingAForeignPerDiemThroughItsGridMenuPersists(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
-        clickRowAction(find(RowActionMenu.class, cell).single(), "Edit");
-        findBigDecimalField().withLabel("Amount (€)").setValue(new BigDecimal("70"));
-        findButton().withText("Save").click();
+        gridRowMenu(page, "Sweden").clickSubMenuItem(0, "Edit");
+        screenshot(page, "foreign-editor");
+        amountField(page).setValue(new BigDecimal("70"));
+        button(page, "Save").click();
 
+        assertThat(grid(page).rows().withCellText("Country", "Sweden").single())
+                .hasCellText("Per-diem", "€70.00");
         assertThat(service.foreignPerDiem(2026, "Sweden").orElseThrow().amount())
                 .isEqualByComparingTo("70.00");
     }
@@ -295,64 +301,66 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
     // --------------------------------------------------- the searchable grid
 
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void searchFiltersTheForeignPerDiemsByCountry() {
-        navigate(AllowanceRatesView.class);
-        var grid = findGrid(ForeignPerDiemDto.class);
-        assertThat(grid.size()).isEqualTo(12);
+    @WithUserDetails(ADMIN_EMAIL)
+    void searchFiltersTheForeignPerDiemsByCountry(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
+        assertThat(grid(page)).hasRowCount(12);
 
-        findTextField().withPlaceholder("Search").setValue("swe");
+        search(page).setValue("swe");
+        screenshot(page, "search-swe");
 
-        assertThat(grid.size()).isEqualTo(1);
-        assertThat(grid.getCellText(0, COUNTRY_COL)).isEqualTo("Sweden");
+        assertThat(grid(page)).hasRowCount(1);
+        assertThat(grid(page).row(0).getCellText("Country")).isEqualTo("Sweden");
 
         // Clearing restores every row — the filter reads the field rather than
         // stacking a new one per keystroke.
-        findTextField().withPlaceholder("Search").setValue("");
-        assertThat(grid.size()).isEqualTo(12);
+        search(page).setValue("");
+        assertThat(grid(page)).hasRowCount(12);
     }
 
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void theGridIsStripedAndFixedHeightRatherThanShowingEveryRow() {
-        navigate(AllowanceRatesView.class);
-        var grid = findGrid(ForeignPerDiemDto.class).getComponent();
+    @WithUserDetails(ADMIN_EMAIL)
+    void theGridIsStripedAndFixedHeightRatherThanShowingEveryRow(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
+        var grid = grid(page);
 
         // The theme-agnostic constant; the LUMO_ pair is inert under Aura.
-        assertThat(grid.getThemeNames())
-                .contains(GridVariant.ROW_STRIPES.getVariantName());
-        assertThat(grid.getHeight()).isEqualTo("512px");
-        assertThat(grid.isAllRowsVisible()).isFalse();
+        assertThat(themeNames(grid)).contains(GridVariant.ROW_STRIPES.getVariantName());
+        assertThat(inlineStyle(grid)).contains("height:512px");
+        assertThat(grid.element().getPropertyBoolean("allRowsVisible")).isFalse();
     }
 
     // ------------------------------------------------------ add / copy year
 
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void addYearSeedsFromTheLatestYearAndSelectsIt() {
-        navigate(AllowanceRatesView.class);
+    @WithUserDetails(ADMIN_EMAIL)
+    void addYearSeedsFromTheLatestYearAndSelectsIt(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
-        findButton().withText("Add Year").click();
-        findIntegerField().withLabel("Year").setValue(2027);
-        findButton().withText("Save").click();
+        button(page, "Add Year").click();
+        screenshot(page, "add-year-dialog");
+        integerField(page, "Year").setValue(2027);
+        button(page, "Save").click();
+        screenshot(page, "year-2027");
 
         // The new year is selected and its foreign per-diems were copied.
-        assertThat(findComboBox(Integer.class).getSelected()).isEqualTo(2027);
-        assertThat(findGrid(ForeignPerDiemDto.class).size()).isEqualTo(12);
+        assertThat(yearSelector(page).getSelectedItem()).isEqualTo("2027");
+        assertThat(grid(page)).hasRowCount(12);
         assertThat(service.availableYears()).containsExactly(2027, 2026);
     }
 
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void copyYearSeedsANamedTargetFromANamedSourceAndSelectsIt() {
-        navigate(AllowanceRatesView.class);
+    @WithUserDetails(ADMIN_EMAIL)
+    void copyYearSeedsANamedTargetFromANamedSourceAndSelectsIt(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
-        findButton().withText("Copy Year").click();
-        findComboBox(Integer.class).withLabel("Source year").selectItem("2026");
-        findIntegerField().withLabel("Target year").setValue(2030);
-        findButton().withText("Save").click();
+        button(page, "Copy Year").click();
+        screenshot(page, "copy-year-dialog");
+        page.find(UnifiedComboBox.class).withLabel("Source year").single().selectItem("2026");
+        integerField(page, "Target year").setValue(2030);
+        button(page, "Save").click();
 
-        assertThat(findComboBox(Integer.class).getSelected()).isEqualTo(2030);
+        assertThat(yearSelector(page).getSelectedItem()).isEqualTo("2030");
         assertThat(service.availableYears()).containsExactly(2030, 2026);
         assertThat(service.mealAllowance(2030)).isPresent();
         assertThat(service.foreignPerDiems(2030)).hasSize(12);
@@ -364,88 +372,133 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      * dialog (ADR-0020).
      */
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void copyYearRefusesAnExistingTargetInTheDialogsErrorSummary() {
-        navigate(AllowanceRatesView.class);
+    @WithUserDetails(ADMIN_EMAIL)
+    void copyYearRefusesAnExistingTargetInTheDialogsErrorSummary(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
-        findButton().withText("Copy Year").click();
-        findComboBox(Integer.class).withLabel("Source year").selectItem("2026");
-        findIntegerField().withLabel("Target year").setValue(2026);
-        findButton().withText("Save").click();
+        button(page, "Copy Year").click();
+        page.find(UnifiedComboBox.class).withLabel("Source year").single().selectItem("2026");
+        integerField(page, "Target year").setValue(2026);
+        button(page, "Save").click();
+        screenshot(page, "existing-target-refused");
 
-        assertThat(UI.getCurrent().getElement().getTextRecursively())
+        var summary = page.find(UnifiedDiv.class).withClassName("error-summary").single();
+        assertThat(summary).isVisible();
+        assertThat(summary.getText())
                 .contains("Please fix the following:")
                 .contains("Year 2026 already has allowance rates");
-        assertThat(find(ErrorSummary.class).all()).isNotEmpty();
         // Still open, and nothing was written.
-        assertThat(findButton().withText("Save").exists()).isTrue();
+        assertThat(button(page, "Save")).isVisible();
         assertThat(service.availableYears()).containsExactly(2026);
     }
 
     // --------------------------------------------------------- add a country
 
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void addCountryThroughEditorAppendsRow() {
-        navigate(AllowanceRatesView.class);
-        int before = findGrid(ForeignPerDiemDto.class).size();
+    @WithUserDetails(ADMIN_EMAIL)
+    void addCountryThroughEditorAppendsRow(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
+        int before = grid(page).getRowCount();
 
         // "Add", not "Add country": the section heading beside it carries the noun.
-        findButton().withText("Add").click();
-        findTextField().withLabel("Country").setValue("Japan");
-        findBigDecimalField().withLabel("Amount (€)").setValue(new BigDecimal("85"));
-        findButton().withText("Save").click();
+        button(page, "Add").click();
+        screenshot(page, "add-country-dialog");
+        page.find(UnifiedTextField.class).withLabel("Country").single().setValue("Japan");
+        amountField(page).setValue(new BigDecimal("85"));
+        button(page, "Save").click();
+        screenshot(page, "japan-added");
 
-        assertThat(findGrid(ForeignPerDiemDto.class).size()).isEqualTo(before + 1);
+        assertThat(grid(page)).hasRowCount(before + 1);
         assertThat(service.foreignPerDiem(2026, "Japan")).isPresent();
     }
 
     // ---- helpers -----------------------------------------------------------
 
+    /**
+     * The toolbar's unlabelled year selector, by its accessible name. Not
+     * {@code withAccessibleName("Year")}: a Flow field's {@code setAriaLabel} sets
+     * the {@code accessibleName} property, which the web component forwards to its
+     * inner {@code <input>}. A browser computes the name from there; Browserless
+     * reads only an {@code aria-label} attribute on the host and finds nothing.
+     * The property itself is synchronised, so both tools read it.
+     */
+    private static UnifiedComboBox yearSelector(UnifiedPage page) {
+        return page.find(UnifiedComboBox.class)
+                .where(field -> "Year".equals(field.getProperty("accessibleName")))
+                .single();
+    }
+
+    private static UnifiedGrid grid(UnifiedPage page) {
+        return page.find(UnifiedGrid.class).single();
+    }
+
+    private static UnifiedButton button(UnifiedPage page, String text) {
+        return page.find(UnifiedButton.class).withText(text).single();
+    }
+
+    private static UnifiedTextField search(UnifiedPage page) {
+        return page.find(UnifiedTextField.class).withPlaceholder("Search").single();
+    }
+
+    private static UnifiedIntegerField integerField(UnifiedPage page, String label) {
+        return page.find(UnifiedIntegerField.class).withLabel(label).single();
+    }
+
+    private static UnifiedBigDecimalField amountField(UnifiedPage page) {
+        return page.find(UnifiedBigDecimalField.class).withLabel("Amount (€)").single();
+    }
+
+    private static UnifiedTabs tabs(UnifiedPage page) {
+        return page.find(UnifiedTabs.class).withClassName("reference-tabs").single();
+    }
+
     /** The links inside the tab bar, in bar order. */
-    private static List<RouterLink> tabLinks(ReferenceTabs tabs) {
-        return tabs.getChildren()
-                .map(Tab.class::cast)
-                .flatMap(Component::getChildren)
-                .map(RouterLink.class::cast)
-                .toList();
+    private static List<UnifiedGenericComponent> tabLinks(UnifiedPage page) {
+        return tabs(page).findComponent(RouterLink.class).all();
+    }
+
+    private static UnifiedDiv rateCard(UnifiedPage page) {
+        return page.find(UnifiedDiv.class).withClassName("rate-list-card").single();
+    }
+
+    private static List<UnifiedDiv> rateRows(UnifiedPage page) {
+        return rateCard(page).find(UnifiedDiv.class).withClassName("rate-row").all();
+    }
+
+    private static List<UnifiedGenericComponent> spans(Scope scope, String className) {
+        return scope.findComponent(Span.class).withClassName(className).all();
+    }
+
+    private static String titleOf(UnifiedDiv row) {
+        return spans(row, "rate-row-title").getFirst().element().getText();
     }
 
     /** The ⋮ trigger's accessible name, which must identify its row. */
-    private static String triggerName(RowActionMenu menu) {
-        return menu.getItems().get(0).getElement().getAttribute("aria-label");
+    private static String triggerName(UnifiedMenuBar menu) {
+        return menu.getRootItemAccessibleName(0);
     }
 
-    private static String titleOf(Component row) {
-        return row.getChildren()
-                .filter(child -> child.getElement().getClassList()
-                        .contains("rate-row-title"))
-                .map(child -> child.getElement().getText())
+    private static UnifiedMenuBar rateRowMenu(UnifiedPage page, String rowTitle) {
+        return rateCard(page).find(UnifiedMenuBar.class).all().stream()
+                .filter(menu -> ("Actions for " + rowTitle).equals(triggerName(menu)))
                 .findFirst()
                 .orElseThrow();
     }
 
-    private RowActionMenu rateRowMenu(String rowTitle) {
-        return $(RowActionMenu.class)
-                .withCondition(menu -> ("Actions for " + rowTitle)
-                        .equals(triggerName(menu)))
-                .single();
+    /** A grid row's ⋮ — through the row's cell, the only route on Browserless (F-085). */
+    private static UnifiedMenuBar gridRowMenu(UnifiedPage page, String country) {
+        return grid(page).rows().withCellText("Country", country).single()
+                .cell("Actions").find(UnifiedMenuBar.class).single();
     }
 
-    /** Opens a row's ⋮ and activates the named action. */
-    private void clickRowAction(RowActionMenu menu, String action) {
-        List<MenuItem> items = menu.getItems().get(0).getSubMenu().getItems();
-        int index = -1;
-        for (int i = 0; i < items.size(); i++) {
-            if (action.equals(items.get(i).getText())) {
-                index = i;
-            }
-        }
-        assertThat(index).as("menu item '%s' is present", action).isNotNegative();
-        // Index rather than caption path: the top-level trigger is icon-only, so
-        // clickItem(String...) has no root caption to match against.
-        // The tester, not use(menu): 25.3's MenuBarLocator re-finds the menu from
-        // the UI, and a Grid cell component is not in that tree (F-082).
-        new MenuBarTester<>(menu).clickItem(0, index);
+    private static List<String> themeNames(UnifiedWrapper wrapper) {
+        String theme = wrapper.element().getAttribute("theme");
+        return theme == null ? List.of() : List.of(theme.trim().split("\\s+"));
+    }
+
+    /** The inline style, whitespace and {@code ;} stripped: Flow and the browser format it differently. */
+    private static String inlineStyle(UnifiedWrapper wrapper) {
+        String style = wrapper.element().getAttribute("style");
+        return style == null ? "" : style.replaceAll("[\\s;]", "");
     }
 }

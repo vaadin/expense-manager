@@ -118,6 +118,10 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Not used by any test directly, but required at runtime: without it the
+             Unified Browserless adapter builds views without Spring, and every view
+             fails with "Unable to create an instance of MainLayout". Compiles fine
+             without it (F-100). -->
         <dependency>
             <groupId>com.vaadin</groupId>
             <artifactId>browserless-test-spring</artifactId>
@@ -138,7 +142,7 @@
             <artifactId>unified-test-playwright</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- @WithUserDetails / @WithMockUser for browserless view-security tests (ADR-0012). -->
+        <!-- @WithUserDetails / @WithMockUser: the Unified adapters sign the test user in (ADR-0027). -->
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>

@@ -4,12 +4,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
-import com.vaadin.browserless.locator.Locators;
+import com.vaadin.expensemanager.base.AbstractUiTest;
 import com.vaadin.expensemanager.report.domain.ExpenseLineSpec;
 import com.vaadin.expensemanager.report.domain.ExpenseReport;
 import com.vaadin.expensemanager.report.domain.GeneratedLineKind;
@@ -17,47 +15,39 @@ import com.vaadin.expensemanager.report.domain.GeneratedLineSpec;
 import com.vaadin.expensemanager.report.domain.QuantityOverride;
 import com.vaadin.expensemanager.report.domain.TravelSpec;
 import com.vaadin.expensemanager.report.service.ExpenseReportRepository;
+import com.vaadin.expensemanager.report.ui.ReportDetailView;
 import com.vaadin.expensemanager.reference.ExpenseType;
 import com.vaadin.expensemanager.reference.ExpenseTypeRepository;
 import com.vaadin.expensemanager.reference.VatRate;
 import com.vaadin.expensemanager.reference.VatRateRepository;
 import com.vaadin.expensemanager.user.UserRepository;
-import org.junit.jupiter.api.AfterEach;
+import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.router.RouterLink;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedGenericComponent;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Shared base for the approval view tests (pyramid layer 3, ADR-0012) —
- * {@link ApprovalQueueViewUiTest} and {@link ApprovalAccessUiTest}.
+ * Shared base for the Unified approval view tests (pyramid layer 3, ADR-0027
+ * proposed) — {@link ApprovalQueueViewUiTest} and {@link ApprovalAccessUiTest}.
  *
- * <p>Modelled on {@code AdminToolsViewUiTest}, <strong>not</strong> the report
- * feature's {@code AbstractReportViewUiTest}: it extends {@link SpringBrowserlessTest}
- * directly and is deliberately <em>not</em> {@code @Transactional}. Rollback
- * isolation interacts badly with browserless security-context ordering once
- * several browserless classes have run (a report opens as {@code LoginView},
- * F-020/F-008 family), whereas the non-transactional {@code @WithUserDetails}
- * browserless pattern is stable. So reports are seeded straight through the
- * repository + aggregate (bypassing the owner-scoped service, to reach any owner
- * and any status) and cleaned up explicitly in {@link #cleanUp()}.
+ * <p>Extends {@link AbstractUiTest}: no {@code @Transactional} and no explicit
+ * clean-up. Reports are seeded straight through the repository + aggregate
+ * (bypassing the owner-scoped service, to reach any owner and any status); every
+ * seed commits, so a browser's server thread sees it, and the
+ * {@code DatabaseSnapshotExtension} removes it after each test.
  *
- * <p>The singleton Testcontainers Postgres is re-declared (F-008) and attaches to
- * the same container via {@code .withReuse(true)}.
+ * <p>The query helpers below are the portable reads every test shares: the
+ * review page's text scoped to the {@code .report-detail} view, the queue and
+ * history cards by their {@code .report-card} link, view titles by {@code H2}, and
+ * "is there a <em>visible</em> button saying X". The last one cannot be a plain
+ * {@code exists()}: the view hides its actions with {@code setVisible(false)}, and
+ * a button hidden <em>after</em> it rendered (Approve/Reject once the decision is
+ * made) stays in a browser's DOM with {@code hidden} and is still matched on
+ * Playwright, while Browserless drops it.
  */
-@SpringBootTest
-@ActiveProfiles("test")
-abstract class AbstractApprovalViewUiTest extends SpringBrowserlessTest
-        implements Locators {
-
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
+abstract class AbstractApprovalViewUiTest extends AbstractUiTest {
 
     @Autowired
     protected ExpenseReportRepository reportRepository;
@@ -71,16 +61,53 @@ abstract class AbstractApprovalViewUiTest extends SpringBrowserlessTest
     @Autowired
     protected VatRateRepository vatRateRepository;
 
-    private final List<Long> createdReportIds = new ArrayList<>();
+    // ------------------------------------------------------------- queries
 
-    @AfterEach
-    void cleanUp() {
-        // No rollback here (non-transactional): remove the reports seeded through
-        // the repository so the shared container stays clean for other classes.
-        createdReportIds.forEach(id ->
-                reportRepository.findById(id).ifPresent(reportRepository::delete));
-        createdReportIds.clear();
+    /** The rendered text of the report detail view (owner or review mode). */
+    protected static String detailText(UnifiedPage page) {
+        return page.findComponent(ReportDetailView.class).withClassName("report-detail")
+                .single().element().getText();
     }
+
+    /** The queue / history cards: one {@link RouterLink} per report. */
+    protected static List<UnifiedGenericComponent> reportCards(UnifiedPage page) {
+        return page.findComponent(RouterLink.class).withClassName("report-card").all();
+    }
+
+    /** Every card's text, joined — what the queue / history list shows. */
+    protected static String cardsText(UnifiedPage page) {
+        return String.join("\n", reportCards(page).stream()
+                .map(card -> card.element().getText()).toList());
+    }
+
+    /** The hrefs of the cards, e.g. {@code review/42}. */
+    protected static List<String> cardHrefs(UnifiedPage page) {
+        return reportCards(page).stream()
+                .map(card -> card.element().getAttribute("href")).toList();
+    }
+
+    /** Whether an {@code H2} with exactly {@code text} renders (view titles, empty states). */
+    protected static boolean hasHeading(UnifiedPage page, String text) {
+        return page.findComponent(H2.class).withText(text).exists();
+    }
+
+    /**
+     * Whether a <em>visible</em> button saying exactly {@code text} is on the page.
+     * Filters on {@code isVisible()} because a Playwright query still matches a
+     * button the server hid after it had rendered.
+     */
+    protected static boolean hasVisibleButton(UnifiedPage page, String text) {
+        return page.find(UnifiedButton.class).withText(text).all().stream()
+                .anyMatch(UnifiedButton::isVisible);
+    }
+
+    /** As {@link #hasVisibleButton}, by accessible name (icon-only buttons). */
+    protected static boolean hasVisibleButtonNamed(UnifiedPage page, String name) {
+        return page.find(UnifiedButton.class).withAccessibleName(name).all().stream()
+                .anyMatch(UnifiedButton::isVisible);
+    }
+
+    // --------------------------------------------------------------- seeds
 
     /**
      * Seeds a SUBMITTED report owned by {@code email} (any user), bypassing the
@@ -94,7 +121,7 @@ abstract class AbstractApprovalViewUiTest extends SpringBrowserlessTest
         report.reconcileLines(List.of(ExpenseLineSpec.of(null, firstType(),
                 new BigDecimal("100.00"), firstRate(), null)));
         report.submit(owner, Instant.parse("2026-07-12T09:00:00Z"));
-        return track(reportRepository.save(report).getId());
+        return reportRepository.save(report).getId();
     }
 
     /**
@@ -111,7 +138,7 @@ abstract class AbstractApprovalViewUiTest extends SpringBrowserlessTest
                 new BigDecimal("100.00"), firstRate(), null)));
         report.submit(owner, Instant.parse("2026-07-12T09:00:00Z"));
         report.approve(admin, Instant.parse("2026-07-14T08:00:00Z"));
-        return track(reportRepository.save(report).getId());
+        return reportRepository.save(report).getId();
     }
 
     /**
@@ -128,7 +155,7 @@ abstract class AbstractApprovalViewUiTest extends SpringBrowserlessTest
                 new BigDecimal("100.00"), firstRate(), null)));
         report.submit(owner, Instant.parse("2026-07-12T09:00:00Z"));
         report.reject(admin, reason, Instant.parse("2026-07-15T08:00:00Z"));
-        return track(reportRepository.save(report).getId());
+        return reportRepository.save(report).getId();
     }
 
     /**
@@ -156,7 +183,7 @@ abstract class AbstractApprovalViewUiTest extends SpringBrowserlessTest
                         new QuantityOverride(BigDecimal.ONE, reason)),
                 List.of(claimed))));
         report.submit(owner, Instant.parse("2026-07-12T09:00:00Z"));
-        return track(reportRepository.save(report).getId());
+        return reportRepository.save(report).getId();
     }
 
     private ExpenseType perDiemType() {
@@ -171,11 +198,6 @@ abstract class AbstractApprovalViewUiTest extends SpringBrowserlessTest
                 .findFirstByValueAndActiveTrueOrderByDisplayOrderAscIdAsc(
                         BigDecimal.ZERO.setScale(2))
                 .orElseThrow();
-    }
-
-    private Long track(Long id) {
-        createdReportIds.add(id);
-        return id;
     }
 
     private ExpenseType firstType() {

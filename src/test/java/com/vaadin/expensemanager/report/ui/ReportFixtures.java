@@ -23,13 +23,11 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Seeds report state through the real services for report view tests — shared by
- * the Unified {@link AbstractReportUiTest} and the Browserless
- * {@link AbstractReportViewUiTest} while both exist.
+ * Seeds report state through the real services for the Unified report view tests
+ * ({@link AbstractReportUiTest}).
  *
  * <p>Every seed commits (no test transaction around it), so a Unified UI test's
- * browser sees it; the {@code DatabaseSnapshotExtension} removes it afterwards. On
- * the Browserless base the surrounding {@code @Transactional} still applies.
+ * browser sees it; the {@code DatabaseSnapshotExtension} removes it afterwards.
  * Owner-scoped seeds belong to the test thread's {@code @WithUserDetails} user.
  */
 public class ReportFixtures {
@@ -90,7 +88,7 @@ public class ReportFixtures {
         var id = seedSubmittedReport(date, amount);
         // One transaction for load + transition + save: the aggregate's lazy
         // status history needs a session, and a Unified test has no test
-        // transaction to lend it one (joins the Browserless base's instead).
+        // transaction to lend it one.
         tx.executeWithoutResult(status -> {
             var admin = userRepository.findByEmail("admin@vaadin.com").orElseThrow();
             var report = reportRepository.findById(id).orElseThrow();
@@ -110,7 +108,7 @@ public class ReportFixtures {
         var id = seedSubmittedReport(date, amount);
         // One transaction for load + transition + save: the aggregate's lazy
         // status history needs a session, and a Unified test has no test
-        // transaction to lend it one (joins the Browserless base's instead).
+        // transaction to lend it one.
         tx.executeWithoutResult(status -> {
             var admin = userRepository.findByEmail("admin@vaadin.com").orElseThrow();
             var report = reportRepository.findById(id).orElseThrow();

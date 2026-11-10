@@ -22,11 +22,12 @@ run without writing a second suite.
 ## Decision
 
 1. **Layer 3 is written on the Unified API.** Tests extend `AbstractUiTest`
-   (`@UnifiedSpringBootTest`, `@Tag("unified")`) and take a `UnifiedPage` parameter.
+   (`@UnifiedSpringBootTest`) and take a `UnifiedPage` parameter. Every `*UiTest` is
+   one; the name is the selector.
    Test code never names a Testing Tool.
 2. **Every test is portable, and both tools run in CI.** In the `tests.yml` matrix,
    the `browserless` leg runs the whole suite and the `playwright` leg runs
-   `-Dgroups=unified` in Chromium. The Playwright leg is `continue-on-error` while
+   `-Dtest='*UiTest'` in Chromium. The Playwright leg is `continue-on-error` while
    this ADR is Proposed. Running only part of the suite on Playwright later is a
    tuning decision, not a change to this ADR.
 3. **Data isolation is snapshot-and-restore, not `@Transactional` rollback.** On
@@ -42,12 +43,17 @@ run without writing a second suite.
    - Layer-2 integration tests keep `@Transactional` rollback.
 4. **Assertions check what a user can see**, through wrappers and their retrying
    assertions. Saved state is checked through the services, which are in the same JVM
-   on every tool. Use of the escape hatch (`@RequiresTestingTool(BROWSERLESS)`) has to
-   be justified in a finding. So far no test uses it.
+   on every tool. Use of `@RequiresTestingTool(BROWSERLESS)` has to be justified in a
+   finding. One test uses it: the date-time picker's error messages exist only on the
+   server (F-099). Wrappers may use the escape hatch inside a per-tool override; test
+   bodies do not.
 5. **Components missing from the Core Set get project wrappers** under
    `src/test/java/.../base/ui/unified/`. Each wrapper defines its methods on the
    portable Unified Element and uses per-tool overrides only where the browser and
-   the server differ (`UnifiedDetails` uses `DetailsTester` on Browserless).
+   the server differ (`UnifiedDetails` uses `DetailsTester` on Browserless;
+   `UnifiedMenuBar`, `UnifiedUpload`, `UnifiedDateTimePicker` and
+   `UnifiedErrorHandlingButton` likewise). Porting the suite took about a dozen
+   (F-097); they are generic, so they can go upstream.
 6. **Production code may gain role class names or test ids** where a test has no
    label or accessible name to find an element by. Accessible names come first,
    because ADR-0020 wants them anyway. So far the only addition is the
@@ -58,17 +64,24 @@ run without writing a second suite.
 - **Vaadin follows the tool.** The alpha supports one Vaadin minor version, so the
   app moved from 25.2 to 25.3 first. Two Browserless idioms broke in that upgrade
   (F-082).
-- **Browser runs are 3–5× slower.** For the 31 migrated tests: about 27s on
-  Browserless versus about 97s on Playwright, wall clock including boot. That is
-  after narrowing queries by tag, which F-087 forced. Before that, `MyReportsViewUiTest`
-  alone took 180s on Playwright.
+- **Browser runs are several times slower.** All 205 UI tests: the whole 583-test
+  suite takes about 29s on Browserless, the 205 UI tests about 4 min on Playwright,
+  wall clock including boot. `ReportDetailViewUiTest` is 137s of that (104 tests).
+  That is after narrowing queries by tag, which F-087 forced; before that,
+  `MyReportsViewUiTest` alone took 180s on Playwright.
+- **`browserless-test-spring` stays, though nothing imports it.** The Browserless
+  adapter wires Spring in only when it is on the runtime classpath; without it every
+  view fails to instantiate, and the build still compiles (F-100).
 - **Some reads differ by tool, and tests have to be written around the difference.**
   Text uses `innerText` in a browser (CSS `text-transform` applies) but the
-  server-side string on Browserless (F-086). Page-wide lookups reach Grid cell
-  components only in a browser (F-085).
-- **The suite is mixed during migration.** 11 test classes are still on
-  `SpringBrowserlessTest`. `ReportFixtures` holds the report seeding for both bases.
-  `browserless-test-spring` stays until the last class moves.
+  server-side string on Browserless (F-086, F-095). Page-wide lookups reach Grid cell
+  components only in a browser (F-085), hidden components only in a browser (F-090),
+  and dev-tools dialogs only in a browser (F-091).
+- **The whole layer is migrated.** All 14 UI test classes run on the Unified API;
+  `SpringBrowserlessTest` and the direct `browserless-test-spring` dependency are gone
+  (the Browserless adapter brings Browserless Test itself). Porting surfaced more
+  per-tool differences (F-089 to F-096) and three assertions that had been vacuous all
+  along (F-098).
 - **It's an alpha.** The API can change between alphas, and gaps are tracked in
   `docs/unified-testing-upstream-issues.md`.
 - **Reversible.** If the spike is dropped, the migrated tests can return to

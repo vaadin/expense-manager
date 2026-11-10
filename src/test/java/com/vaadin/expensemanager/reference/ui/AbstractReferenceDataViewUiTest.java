@@ -1,105 +1,79 @@
 package com.vaadin.expensemanager.reference.ui;
 
-import java.util.ArrayList;
 import java.util.List;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
-import com.vaadin.browserless.locator.Locators;
-import com.vaadin.expensemanager.reference.ReferenceDataService;
-import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.grid.GridLocator;
+import com.vaadin.expensemanager.base.AbstractUiTest;
 import com.vaadin.expensemanager.base.ui.NavGroup;
+import com.vaadin.expensemanager.reference.ReferenceDataService;
 import com.vaadin.flow.spring.security.AuthenticationContext;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedGrid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Shared base for the two reference-data settings-screen view tests (pyramid
- * layer 3, ADR-0012) — {@link VatRateViewUiTest} and
- * {@link ExpenseTypeViewUiTest} (issue #22, ADR-0008/0018).
+ * Shared base for the reference-data settings-screen Unified UI tests (pyramid
+ * layer 3, ADR-0027 proposed) — {@link VatRateViewUiTest},
+ * {@link ExpenseTypeViewUiTest} and {@link ReferenceConfigViewUiTest} (issue #22,
+ * ADR-0008/0018). Runs unchanged on Browserless and Playwright.
  *
- * <p>Consolidates the boilerplate the two screens share so neither test repeats
- * it — the singleton Testcontainers Postgres, the browserless setup, the modern
- * locator DSL, and the {@link ReferenceDataService} handle used to assert the
- * active-options query behind an admin's UI action:
- * <ul>
- *   <li><strong>{@code implements Locators}</strong> opts this
- *       {@link SpringBrowserlessTest} subclass into the fluent typed locator API
- *       ({@code findButton()}, {@code findGrid(..)}, …) — the documented
- *       replacement for the deprecated {@code $()} / {@code $view()} aliases.</li>
- *   <li>The <strong>singleton {@link PostgreSQLContainer}</strong> mirrors
- *       {@code AbstractIntegrationTest}: {@link SpringBrowserlessTest} occupies
- *       the single inheritance slot, so we re-declare it here rather than extend
- *       that base (F-008). Testcontainers reuse means both tests share one Docker
- *       container — a shared base class is the composition helper F-008 called
- *       for.</li>
- *   <li><strong>{@code @Transactional}</strong> rolls back each mutating test
- *       method (add/edit/reorder/deactivate all write), so the shared container
- *       stays at its Flyway seed for the next test — the browserless UI, the
- *       view, and the {@code @Transactional} service all run on the one test
- *       thread and share the rolled-back transaction.</li>
- * </ul>
+ * <p>Holds what the three share: the {@link ReferenceDataService} handle used to
+ * assert the active-options query behind an admin's UI action, and the grid
+ * helpers. The Postgres container, the app and data isolation come from
+ * {@link AbstractUiTest}: every add/edit/reorder/deactivate commits, and the
+ * {@code DatabaseSnapshotExtension} restores the Flyway seed after each test (no
+ * {@code @Transactional}, F-083).
  */
-@SpringBootTest
-@ActiveProfiles("test")
-@Transactional
-abstract class AbstractReferenceDataViewUiTest extends SpringBrowserlessTest
-        implements Locators {
+abstract class AbstractReferenceDataViewUiTest extends AbstractUiTest {
 
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
+    /** Header of the row-action column on both screens. */
+    protected static final String ACTIONS = "Actions";
 
-    static {
-        POSTGRES.start();
-    }
-
-    /**
-     * The same service the views inject — used to assert the active-options query
-     * an admin's UI action produced (which has no dedicated view surface until the
-     * Phase 2.3 line editor exists). The tests run as {@code admin@vaadin.com}, so
-     * its {@code @RolesAllowed("ADMIN")} reads succeed.
-     */
     /** Resolves the signed-in user for {@code navEntryLabels()}. */
     @Autowired
     protected AuthenticationContext authenticationContext;
 
+    /**
+     * The same service the views inject — used to assert the active-options query
+     * an admin's UI action produced. In the test JVM on every Testing Tool; the
+     * tests run as {@code admin@vaadin.com}, so its {@code @RolesAllowed("ADMIN")}
+     * reads succeed.
+     */
     @Autowired
     protected ReferenceDataService service;
 
+    /** The screen's one grid. Lazy: each use finds it again. */
+    protected static UnifiedGrid grid(UnifiedPage page) {
+        return page.find(UnifiedGrid.class).single();
+    }
+
     /** The rendered text of one grid column across every row, top to bottom. */
-    protected static List<String> columnText(GridLocator<?> grid, int column) {
-        var values = new ArrayList<String>();
-        for (int row = 0; row < grid.size(); row++) {
-            values.add(grid.getCellText(row, column));
-        }
-        return values;
+    protected static List<String> columnText(UnifiedPage page, String header) {
+        return grid(page).column(header).getCellTexts();
     }
 
     /**
-     * The row-action button carrying {@code ariaLabel} in the given grid row's
-     * actions cell. The action buttons live inside a {@code Grid} component
-     * column, so they aren't reachable from a UI-wide {@code findButton()} —
-     * scope the search to the cell component via {@code getCellComponent} first.
+     * The row-action button carrying {@code accessibleName} in the given grid row's
+     * actions cell. The buttons live in a component column, so they are reached
+     * through the row's cell: a page-wide lookup misses them on Browserless (F-085).
      */
-    protected Button rowActionButton(GridLocator<?> grid, int row, int actionsColumn,
-            String ariaLabel) {
-        var cell = grid.getCellComponent(row, actionsColumn);
-        return find(Button.class, cell).withAriaLabel(ariaLabel).single();
+    protected static UnifiedButton rowAction(UnifiedPage page, int row, String accessibleName) {
+        return grid(page).row(row).cell(ACTIONS).find(UnifiedButton.class)
+                .withAccessibleName(accessibleName).single();
+    }
+
+    /** The button with this visible text — "New", "Save". */
+    protected static UnifiedButton button(UnifiedPage page, String text) {
+        return page.find(UnifiedButton.class).withText(text).single();
     }
 
     /**
      * The navigation entries the signed-in user can reach, by label (#146).
      *
-     * <p>Was the {@code @Menu}-generated side-nav paths. The nav is now
-     * hand-authored in {@code NavGroup} and two of its three groups render as
-     * menus, whose items the browserless tester cannot see (F-071) — so this
-     * asks the model the shell renders from, and the rendered menu is left to
-     * visual verification.
+     * <p>Asks the model the shell renders from: two of the three nav groups render
+     * as menus whose items exist only while open (F-071). Portable as it stands —
+     * the server is in the test JVM on every Testing Tool, and
+     * {@code @WithUserDetails} sets the test thread's user.
      */
     protected List<String> navEntryLabels() {
         return NavGroup.allVisibleTo(authenticationContext).stream()

@@ -85,6 +85,7 @@ class MyReportsViewUiTest extends AbstractReportUiTest {
     @Test
     void emptyStateRendersWhenOwnerHasNoReports(UnifiedPage page) {
         page.navigate(MyReportsView.class);
+        screenshot(page, "empty-state");
 
         assertThat(renderedText(page)).contains("No expense reports yet");
     }
@@ -112,6 +113,7 @@ class MyReportsViewUiTest extends AbstractReportUiTest {
                 LocalDateTime.of(2026, 8, 27, 19, 0));
 
         page.navigate(MyReportsView.class);
+        screenshot(page, "card-with-trip");
 
         assertThat(renderedSymbols(page)).contains(LucideIcon.PLANE.glyph());
     }
@@ -122,6 +124,7 @@ class MyReportsViewUiTest extends AbstractReportUiTest {
         fixtures.seedReport(LocalDate.of(2026, 7, 1), "newer trip");
 
         page.navigate(MyReportsView.class);
+        screenshot(page, "two-drafts");
         var text = renderedText(page);
 
         // Both reports, their status badge, and the derived €0.00 total render.
@@ -136,6 +139,7 @@ class MyReportsViewUiTest extends AbstractReportUiTest {
         fixtures.seedReport(LocalDate.of(2026, 7, 1), "still a draft");
         fixtures.seedSubmittedReport(LocalDate.of(2026, 7, 2), "50.00");
         page.navigate(MyReportsView.class);
+        screenshot(page, "unfiltered");
 
         // Both sections show before any filter is applied.
         assertThat(renderedText(page)).containsIgnoringCase("Needs your attention")
@@ -143,12 +147,14 @@ class MyReportsViewUiTest extends AbstractReportUiTest {
 
         // Filtering by SUBMITTED leaves only the "Closed" section.
         comboBox(page, "Status").selectItem("Submitted");
+        screenshot(page, "status-submitted");
         assertThat(renderedText(page)).containsIgnoringCase("Closed")
                 .doesNotContainIgnoringCase("Needs your attention")
                 .doesNotContain("still a draft");
 
         // Filtering by DRAFT leaves only the "Needs your attention" section.
         comboBox(page, "Status").selectItem("Draft");
+        screenshot(page, "status-draft");
         assertThat(renderedText(page)).containsIgnoringCase("Needs your attention")
                 .contains("still a draft")
                 .doesNotContainIgnoringCase("Closed");
@@ -160,12 +166,15 @@ class MyReportsViewUiTest extends AbstractReportUiTest {
         fixtures.seedReport(LocalDate.of(2026, 7, 15), "july");
         fixtures.seedReport(LocalDate.of(2025, 7, 15), "last july");
         page.navigate(MyReportsView.class);
+        screenshot(page, "unfiltered");
 
         comboBox(page, "Month").selectItem("July");
+        screenshot(page, "month-july");
         // Both Julys remain; January is filtered out.
         assertThat(renderedText(page)).contains("last july").doesNotContain("january");
 
         comboBox(page, "Year").selectItem("2026");
+        screenshot(page, "month-july-year-2026");
         // July + 2026 leaves just the one report — the 2025 July drops out.
         assertThat(renderedText(page)).contains("july")
                 .doesNotContain("last july").doesNotContain("january");
@@ -185,10 +194,12 @@ class MyReportsViewUiTest extends AbstractReportUiTest {
     @Test
     void newReportButtonNavigatesToDetailView(UnifiedPage page) {
         page.navigate(MyReportsView.class);
+        screenshot(page, "before-new-report");
 
         page.find(UnifiedButton.class).withText("New report").single().click();
 
         assertThat(page).isAt(ReportDetailView.class);
+        screenshot(page, "report-detail");
     }
 
     // ---- Metric band (docs/design/components/metric-card.md) ----
@@ -226,6 +237,7 @@ class MyReportsViewUiTest extends AbstractReportUiTest {
     void onlyTheRejectedFragmentOfTheSubLineIsCalledOut(UnifiedPage page) {
         fixtures.seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "missing receipt");
         page.navigate(MyReportsView.class);
+        screenshot(page, "rejected-metric-band");
 
         // The alert span holds the fragment alone — the "·" before it stays in the
         // sub-line's own (secondary) colour.
@@ -288,9 +300,11 @@ class MyReportsViewUiTest extends AbstractReportUiTest {
         assertThat(sections(page)).hasSize(2)
                 .allSatisfy(section -> assertThat(section.isOpen()).isTrue());
 
+        screenshot(page, "both-expanded");
         sections(page).getFirst().toggle();
 
         page.waitUntil(() -> !sections(page).getFirst().isOpen());
+        screenshot(page, "first-collapsed");
         assertThat(sections(page).get(1).isOpen()).isTrue();
         // The count is in the summary, so it survives the collapse — it is then
         // the only thing left saying what is inside.

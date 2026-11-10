@@ -2,33 +2,38 @@ package com.vaadin.expensemanager.approval.ui;
 
 import java.time.LocalDate;
 
+import com.vaadin.expensemanager.base.ui.ErrorSummary;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedTextArea;
 import com.vaadin.expensemanager.report.domain.ReportStatus;
 import com.vaadin.expensemanager.report.ui.ReportDetailView;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
-import com.vaadin.flow.component.UI;
-import com.vaadin.flow.router.RouterLink;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedDialog;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Browserless view test (pyramid layer 3, ADR-0012) for the approval tracer
+ * Unified UI test (pyramid layer 3, ADR-0027 proposed) for the approval tracer
  * bullet's <strong>admin</strong> surfaces (Phase 5.1): the ADMIN-only queue
- * ({@link ApprovalQueueView}) and the admin-review mode on
- * {@link ReportDetailView} reached from it. The non-admin access checks live in
+ * ({@link ApprovalQueueView}), the review history ({@link ReviewHistoryView}) and
+ * the admin-review mode on {@link ReportDetailView} reached from them. Runs
+ * unchanged on Browserless and Playwright. The non-admin access checks live in
  * {@link ApprovalAccessUiTest}.
  *
- * <p>Runs as the seeded admin via class-level {@link WithUserDetails} — the same
- * shape as {@code ReportDetailViewUiTest} (a method-level mix of users on this
- * {@code @Transactional} base loses the security context under full-suite
- * ordering, F-020, so admin and user cases are split into two classes). Covers
- * cross-owner queue visibility, the empty state, and the read-only review +
- * approve happy path, with persisted state asserted through the repository. Mind
- * F-035 (signal short-circuit) and F-036 (overlay/visibility).
+ * <p>Runs as the seeded admin via class-level {@link WithUserDetails}. Covers
+ * cross-owner queue visibility, the empty states, the read-only review, approve
+ * and reject (with and without a comment), and the overridden-line render, with
+ * persisted state asserted through the repository.
  *
- * <p>Runs as the seeded admin via class-level {@link WithUserDetails}, the same
- * pattern as {@code ReportDetailViewUiTest}/{@code AdminToolsViewUiTest}.
+ * <p>The queue and history assertions read the <em>cards'</em> text, not the
+ * whole page: the shell header shows the signed-in admin's name ("Expense
+ * Admin"), which would make the submitter assertion pass on its own. The
+ * reject-dialog error is read from the dialog's {@link ErrorSummary} — the dialog
+ * is not inside the routed view (F-036).
  */
 @WithUserDetails("admin@vaadin.com")
 class ApprovalQueueViewUiTest extends AbstractApprovalViewUiTest {
@@ -36,57 +41,55 @@ class ApprovalQueueViewUiTest extends AbstractApprovalViewUiTest {
     private static final String ADMIN_EMAIL = "admin@vaadin.com";
 
     @Test
-    void adminSeesSubmittedReportsAcrossOwnersWithReviewLinks() {
+    void adminSeesSubmittedReportsAcrossOwnersWithReviewLinks(UnifiedPage page) {
         var userReport = seedSubmittedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
         seedSubmittedReportForOwner(ADMIN_EMAIL, LocalDate.of(2026, 6, 1), "admin trip");
 
-        navigate(ApprovalQueueView.class);
+        page.navigate(ApprovalQueueView.class);
+        screenshot(page, "queue");
 
-        var text = getCurrentView().getElement().getTextRecursively();
-        assertThat(text).contains("user trip", "admin trip", "Demo User",
+        assertThat(cardsText(page)).contains("user trip", "admin trip", "Demo User",
                 "Expense Admin");
         // Each row is a real router link into the /review/{id} alias.
-        assertThat($(RouterLink.class).all().stream()
-                .anyMatch(a -> ("review/" + userReport).equals(
-                        a.getElement().getAttribute("href")))).isTrue();
+        assertThat(cardHrefs(page)).contains("review/" + userReport);
     }
 
     @Test
-    void anEmptyQueueShowsTheEmptyState() {
-        navigate(ApprovalQueueView.class);
+    void anEmptyQueueShowsTheEmptyState(UnifiedPage page) {
+        page.navigate(ApprovalQueueView.class);
+        screenshot(page, "empty-queue");
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
-                .contains("Nothing to review");
+        assertThat(hasHeading(page, "Nothing to review")).isTrue();
     }
 
     @Test
-    void adminOpensAReportReadOnlyAndApprovesIt() {
+    void adminOpensAReportReadOnlyAndApprovesIt(UnifiedPage page) {
         var id = seedSubmittedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
 
-        navigate("review/" + id, ReportDetailView.class);
+        page.navigate("review/" + id);
+        screenshot(page, "review");
 
         // Read-only review: no owner editing affordances, but the line is shown.
-        var text = getCurrentView().getElement().getTextRecursively();
-        assertThat(text).contains("user trip", "Submitted");
-        assertThat(findButton().withText("Save").exists()).isFalse();
-        assertThat(findButton().withText("Submit for approval").exists()).isFalse();
-        assertThat(findButton().withText("Delete").exists()).isFalse();
-        assertThat(findButton().withText("Add expense").exists()).isFalse();
+        assertThat(detailText(page)).contains("user trip", "Submitted");
+        assertThat(hasVisibleButton(page, "Save")).isFalse();
+        assertThat(hasVisibleButton(page, "Submit for approval")).isFalse();
+        assertThat(hasVisibleButton(page, "Delete")).isFalse();
+        assertThat(hasVisibleButton(page, "Add expense")).isFalse();
 
         // Approve moves it to APPROVED and drops the action (no longer reviewable).
-        findButton().withText("Approve").click();
+        page.find(UnifiedButton.class).withText("Approve").single().click();
+        screenshot(page, "approved");
 
         assertThat(reportRepository.findById(id).orElseThrow().getStatus())
                 .isEqualTo(ReportStatus.APPROVED);
-        assertThat(getCurrentView().getElement().getTextRecursively())
-                .contains("Approved");
-        assertThat(findButton().withText("Approve").exists()).isFalse();
+        assertThat(detailText(page)).contains("Approved");
+        assertThat(hasVisibleButton(page, "Approve")).isFalse();
     }
 
     @Test
-    void anApproverSeesAnOverriddenLineWithItsReasonAndBaselineReadOnly() {
+    void anApproverSeesAnOverriddenLineWithItsReasonAndBaselineReadOnly(UnifiedPage page) {
         // Quantity Override (ADR-0024): the approver must see where a judgement call
         // was made, why, and how far it deviates from the statutory figure — through
         // the same review route, entirely read-only.
@@ -94,44 +97,50 @@ class ApprovalQueueViewUiTest extends AbstractApprovalViewUiTest {
                 LocalUserSeeder.PLAIN_USER_EMAIL, LocalDate.of(2026, 6, 2), "user trip",
                 "the Wednesday was personal");
 
-        navigate("review/" + id, ReportDetailView.class);
+        page.navigate("review/" + id);
+        screenshot(page, "overridden-line");
 
-        var text = getCurrentView().getElement().getTextRecursively();
-        assertThat(text).contains("Overridden",
+        assertThat(detailText(page)).contains("Overridden",
                 "Reason: the Wednesday was personal",
                 "Calculated: 2 × €54.00 = €108.00",
                 "€54.00");
         // No editing surface: an approver rejects with a comment, never corrects.
-        assertThat(findButton()
-                .withAriaLabel("Edit override: Per diem allowance (full day)").exists())
-                .isFalse();
-        assertThat(findButton()
-                .withAriaLabel("Reset to calculated: Per diem allowance (full day)")
-                .exists()).isFalse();
+        assertThat(hasVisibleButtonNamed(page,
+                "Edit override: Per diem allowance (full day)")).isFalse();
+        assertThat(hasVisibleButtonNamed(page,
+                "Reset to calculated: Per diem allowance (full day)")).isFalse();
     }
 
     @Test
-    void rejectingWithAnEmptyCommentShowsTheReasonRequiredErrorAndDoesNotSubmit() {
+    void rejectingWithAnEmptyCommentShowsTheReasonRequiredErrorAndDoesNotSubmit(
+            UnifiedPage page) {
         var id = seedSubmittedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
 
-        navigate("review/" + id, ReportDetailView.class);
-        findButton().withText("Reject").click();          // opens the reason dialog
-        findButton().withText("Reject report").click();   // confirm with empty comment
+        page.navigate("review/" + id);
+        page.find(UnifiedButton.class).withText("Reject").single().click(); // opens the dialog
+        screenshot(page, "reject-dialog");
+        var dialog = rejectDialog(page);
+        dialog.find(UnifiedButton.class).withText("Reject report").single()
+                .click(); // confirm with an empty comment
+        screenshot(page, "reason-required");
 
         // The confirm stays enabled (ADR-0020) and the dialog's error summary shows
-        // the reason-required message — asserted under the UI, as the dialog overlay
-        // attaches to the UI, not the routed view (F-036).
-        assertThat(UI.getCurrent().getElement().getTextRecursively())
+        // the reason-required message.
+        assertThat(dialog.findComponent(ErrorSummary.class).withClassName("error-summary")
+                .single().element().getText())
                 .contains("A rejection comment is required.");
         // Still open, nothing submitted: the report is untouched.
-        assertThat(findButton().withText("Reject report").exists()).isTrue();
+        assertThat(dialog).isOpen();
+        assertThat(dialog.find(UnifiedButton.class).withText("Reject report").single())
+                .isVisible();
         assertThat(reportRepository.findById(id).orElseThrow().getStatus())
                 .isEqualTo(ReportStatus.SUBMITTED);
     }
 
     @Test
-    void reviewHistoryShowsTerminalReportsAcrossOwnersWithTheDecisionAndReviewLinks() {
+    void reviewHistoryShowsTerminalReportsAcrossOwnersWithTheDecisionAndReviewLinks(
+            UnifiedPage page) {
         var approvedId = seedApprovedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "approved trip");
         seedRejectedReportForOwner(ADMIN_EMAIL, LocalDate.of(2026, 6, 1),
@@ -139,49 +148,58 @@ class ApprovalQueueViewUiTest extends AbstractApprovalViewUiTest {
         // A still-pending report must NOT leak into the history.
         seedSubmittedReportForOwner(ADMIN_EMAIL, LocalDate.of(2026, 6, 3), "pending trip");
 
-        navigate(ReviewHistoryView.class);
+        page.navigate(ReviewHistoryView.class);
+        screenshot(page, "history");
 
-        var text = getCurrentView().getElement().getTextRecursively();
+        var text = cardsText(page);
         assertThat(text).contains("approved trip", "rejected trip", "Approved",
                 "Rejected", "Demo User", "Expense Admin",
                 "Please itemise the taxi fares.");
         assertThat(text).doesNotContain("pending trip");
         // Each row is a real router link into the /review/{id} alias.
-        assertThat($(RouterLink.class).all().stream()
-                .anyMatch(a -> ("review/" + approvedId).equals(
-                        a.getElement().getAttribute("href")))).isTrue();
+        assertThat(cardHrefs(page)).contains("review/" + approvedId);
     }
 
     @Test
-    void anEmptyReviewHistoryShowsTheEmptyState() {
-        navigate(ReviewHistoryView.class);
+    void anEmptyReviewHistoryShowsTheEmptyState(UnifiedPage page) {
+        page.navigate(ReviewHistoryView.class);
+        screenshot(page, "empty-history");
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
-                .contains("No reviewed reports yet");
+        assertThat(hasHeading(page, "No reviewed reports yet")).isTrue();
     }
 
     @Test
-    void rejectingWithAReasonRecordsItAndMovesTheReportToRejected() {
+    void rejectingWithAReasonRecordsItAndMovesTheReportToRejected(UnifiedPage page) {
         var id = seedSubmittedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
 
-        navigate("review/" + id, ReportDetailView.class);
-        findButton().withText("Reject").click();
-        findTextArea().withLabel("Rejection comment")
+        page.navigate("review/" + id);
+        page.find(UnifiedButton.class).withText("Reject").single().click();
+        var dialog = rejectDialog(page);
+        dialog.find(UnifiedTextArea.class).withLabel("Rejection comment").single()
                 .setValue("Please itemise the taxi fares.");
-        findButton().withText("Reject report").click();
+        screenshot(page, "reject-with-reason");
+        dialog.find(UnifiedButton.class).withText("Reject report").single().click();
+        screenshot(page, "rejected");
 
         assertThat(reportRepository.findById(id).orElseThrow().getStatus())
                 .isEqualTo(ReportStatus.REJECTED);
         // The review actions drop (no longer reviewable) and the audit trail with the
         // reason is shown to the admin too.
-        assertThat(findButton().withText("Reject").exists()).isFalse();
-        assertThat(findButton().withText("Approve").exists()).isFalse();
+        assertThat(hasVisibleButton(page, "Reject")).isFalse();
+        assertThat(hasVisibleButton(page, "Approve")).isFalse();
         // Review mode stays read-only even though REJECTED is owner-editable — the
         // admin must not gain edit/save affordances on another user's report.
-        assertThat(findButton().withText("Save").exists()).isFalse();
-        assertThat(findButton().withText("Add expense").exists()).isFalse();
-        assertThat(getCurrentView().getElement().getTextRecursively())
-                .contains("Rejected", "Please itemise the taxi fares.");
+        assertThat(hasVisibleButton(page, "Save")).isFalse();
+        assertThat(hasVisibleButton(page, "Add expense")).isFalse();
+        assertThat(detailText(page)).contains("Rejected", "Please itemise the taxi fares.");
+    }
+
+    // --------------------------------------------------------------- helpers
+
+    private static UnifiedDialog rejectDialog(UnifiedPage page) {
+        var dialog = page.find(UnifiedDialog.class).withHeaderTitle("Reject report").single();
+        assertThat(dialog).isOpen();
+        return dialog;
     }
 }

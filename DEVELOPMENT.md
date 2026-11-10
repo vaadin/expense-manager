@@ -43,15 +43,26 @@ identically-named tool sets would make the skills' bare tool references ambiguou
 ./mvnw test                       # Run all tests
 ./mvnw test -Dtest=ClassName      # Run a single test class
 
-# Unified UI tests (tag "unified", ADR-0027 proposed) in a real Chromium
-./mvnw test -Dgroups=unified -Dvaadin.testing.tool=playwright
+# The UI tests (every *UiTest, ADR-0027 proposed) in a real Chromium
+./mvnw test -Dtest='*UiTest' -Dvaadin.testing.tool=playwright
+
+# ...with a screenshot at each test's main steps, in target/screenshots/
+./mvnw test -Dtest='*UiTest' -Dvaadin.testing.tool=playwright -Dui.screenshots=true
 ```
 
 The Unified UI tests run on Browserless by default, as part of `./mvnw test`.
 `-Dvaadin.testing.tool=playwright` runs the same tests in a browser. Playwright
 downloads its own Chromium the first time. To use a Chromium that's already
 installed, add `-Dvaadin.testing.playwright.executable=/path/to/chrome` and set
-`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`.
+`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`. Add `-Dvaadin.testing.playwright.headless=false`
+to watch the browser.
+
+Screenshots are opt-in: a test calls `screenshot(page, "step")` (from
+`AbstractUiTest`) at its main steps, and it writes
+`target/screenshots/<TestClass>/<testMethod>/NN-<step>.png` only with
+`-Dui.screenshots=true` and a real browser. On Browserless it does nothing.
+Failure screenshots are separate and always on in a browser:
+`target/surefire-reports/unified-evidence/`.
 
 `./mvnw` is the single documented command to run the app locally. It boots in
 the **`local`** profile (the default), and Spring Boot's Docker Compose support

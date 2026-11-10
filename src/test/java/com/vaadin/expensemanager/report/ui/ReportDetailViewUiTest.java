@@ -3,125 +3,156 @@ package com.vaadin.expensemanager.report.ui;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import com.vaadin.expensemanager.base.ui.LucideIcon;
-import com.vaadin.expensemanager.base.ui.RowActionMenu;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedBigDecimalField;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedDatePickerInput;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedDateTimePicker;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedDiv;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedElements;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedFormLayout;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedHorizontalLayout;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedIntegerField;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedMenuBar;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedSpan;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedTextArea;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedUpload;
+import com.vaadin.expensemanager.reference.ReferenceDataService;
 import com.vaadin.expensemanager.report.domain.GeneratedLineKind;
 import com.vaadin.expensemanager.report.domain.QuantityOverride;
 import com.vaadin.expensemanager.report.domain.ReportStatus;
 import com.vaadin.expensemanager.report.service.ExpenseLineDto;
 import com.vaadin.expensemanager.report.service.ReportDetailDto;
 import com.vaadin.expensemanager.report.service.TravelDto;
-import com.vaadin.expensemanager.reference.ExpenseTypeDto;
-import com.vaadin.expensemanager.reference.VatRateDto;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
-import com.vaadin.flow.component.menubar.MenuBarTester;
-import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.HasLabel;
-import com.vaadin.flow.component.UI;
-import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.checkbox.Checkbox;
-import com.vaadin.flow.component.contextmenu.MenuItem;
-import com.vaadin.flow.component.datepicker.DatePicker;
-import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
-import com.vaadin.flow.component.dialog.Dialog;
-import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.html.Anchor;
-import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.Hr;
 import com.vaadin.flow.component.html.Image;
-import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.SvgIcon;
-import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.radiobutton.RadioButtonGroupLocator;
-import com.vaadin.flow.component.textfield.BigDecimalField;
-import com.vaadin.flow.component.textfield.IntegerField;
-import com.vaadin.flow.component.upload.Upload;
-import jakarta.persistence.EntityManager;
-
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.Scope;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedElement;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.UnifiedWrapper;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedCheckbox;
+import com.vaadin.testing.unified.component.UnifiedComboBox;
+import com.vaadin.testing.unified.component.UnifiedDatePicker;
+import com.vaadin.testing.unified.component.UnifiedDialog;
+import com.vaadin.testing.unified.component.UnifiedRadioButtonGroup;
+import com.vaadin.testing.unified.component.UnifiedTextField;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.test.context.support.WithUserDetails;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Browserless view test (pyramid layer 3, ADR-0012) for {@link ReportDetailView}
- * (UC-001/UC-005, ADR-0019). Runs as the seeded plain user via
- * {@link WithUserDetails}.
+ * Unified UI test (pyramid layer 3, ADR-0027 proposed) for {@link ReportDetailView}
+ * (UC-001/UC-005, ADR-0019) and its dialogs — the line editor, the travel editor, the
+ * override and receipt dialogs. Runs as the seeded plain user via
+ * {@link WithUserDetails}, unchanged on Browserless and Playwright.
  *
  * <p>Covers the create path (transient working copy, date defaulting to today,
  * first save persisting a DRAFT and routing to {@code /report/{id}}), the
  * always-enabled-Save + validation-error-summary rule (no disabled submit,
- * ADR-0020), report-level editing, and the draft-only delete returning to the
- * list. Persisted state is asserted through {@link #service}.
+ * ADR-0020), report-level editing, submit/resubmit, receipts, the travel calculator,
+ * quantity overrides and their clearing, and the draft-only delete returning to the
+ * list. Persisted state is asserted through {@link #service}, which is in the test
+ * JVM on every Testing Tool.
+ *
+ * <p>Written around what differs between the tools:
+ * <ul>
+ *   <li><b>Only visible components count.</b> Browserless's queries skip hidden
+ *       components; a browser's find also returns elements with {@code hidden}. Every
+ *       "is it offered" check and every click goes through a visible filter
+ *       ({@link #hasButton}, {@link #click}).</li>
+ *   <li><b>Text.</b> The view's text is {@code innerText} in a browser, so it never
+ *       includes a dialog's (dialogs are overlays, outside the view on both tools), and
+ *       dialog text is read from the open dialogs ({@link #dialogText}). Exact matches
+ *       on a span compare its DOM text ({@link #rawText}), not {@code innerText}:
+ *       {@code .section-label} is {@code text-transform: uppercase} (F-086).</li>
+ *   <li><b>Nested dialogs.</b> Since 25.3 a dialog opened from a modal dialog nests
+ *       inside it on both tools (F-082), so the outer editor's text contains the
+ *       confirm's; {@link #openDialogSaying} picks the innermost by taking the
+ *       shortest matching text.</li>
+ *   <li><b>Configuration the browser never sees</b> (date-time picker i18n error
+ *       messages) is the one Browserless-only test; see
+ *       {@link #travelPickersCarryIncompleteAndBadInputErrorMessages}.</li>
+ * </ul>
  */
 @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-class ReportDetailViewUiTest extends AbstractReportViewUiTest {
+class ReportDetailViewUiTest extends AbstractReportUiTest {
 
-    /**
-     * Only to detach a just-seeded {@code Receipt}. This test class is
-     * {@code @Transactional}, so one session spans a whole test, whereas each of the
-     * real clicks below is its own request with its own session. That matters for
-     * exactly one case: a receipt created and then destroyed in the same test.
-     */
+    /** For the one test that creates an expense type (as the admin). */
     @Autowired
-    private EntityManager entityManager;
+    private ReferenceDataService referenceData;
 
     @Test
-    void newReportSaveWithDefaultsPersistsTodayDatedDraftAndRoutesToId() {
-        navigate(ReportDetailView.class);
+    void newReportSaveWithDefaultsPersistsTodayDatedDraftAndRoutesToId(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
+        screenshot(page, "new-report");
 
         // No field touched: the date defaults to today; first save persists.
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var mine = service.listMine();
         assertThat(mine).hasSize(1);
         assertThat(mine.getFirst().reportDate()).isEqualTo(LocalDate.now());
         // Still on the detail view — now the persisted /report/{id} form.
-        assertThat(getCurrentView()).isInstanceOf(ReportDetailView.class);
+        assertThat(page).hasPath("report/" + mine.getFirst().id());
+        screenshot(page, "saved-draft");
     }
 
     @Test
-    void missingRequiredDateShowsErrorSummaryAndPersistsNothing() {
-        navigate(ReportDetailView.class);
+    void missingRequiredDateShowsErrorSummaryAndPersistsNothing(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
 
-        // The DatePicker tester refuses to *set* an invalid value (null on a
-        // required field), so clear the value straight on the component to model
-        // a user emptying the field, then save (finding F-021).
-        $(DatePicker.class).first().clear();
-        findButton().withText("Save").click();
+        // A user emptying the required date, then saving.
+        page.find(UnifiedDatePicker.class).withLabel("Report date").single().clear();
+        click(page, "Save");
+        screenshot(page, "error-summary");
 
         // Always-enabled Save + top-of-form error summary (ADR-0020).
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("Report date is required");
         assertThat(service.listMine()).isEmpty();
     }
 
     @Test
-    void reportDateCarriesABadInputErrorMessage() {
+    void reportDateCarriesABadInputErrorMessage(UnifiedPage page) {
         // Issue #85: typing an unparseable date (e.g. "dsdds") makes the picker
         // invalid; without a bad-input message the error reaches the summary blank.
-        // The tester can't type an unparseable value, so we assert the message that
-        // prevents the blank error is configured on the field.
-        navigate(ReportDetailView.class);
+        // The Browserless version could only read the configured message; the bad-input
+        // message is server-side i18n, never sent to the browser. Now the test types the
+        // garbage and checks the message the summary actually carries.
+        page.navigate(ReportDetailView.class);
 
-        var picker = (DatePicker) $(DatePicker.class).first();
-        assertThat(picker.getI18n()).isNotNull();
-        assertThat(picker.getI18n().getBadInputErrorMessage()).isNotBlank();
+        page.find(UnifiedDatePickerInput.class).withLabel("Report date").single()
+                .typeText("dsdds");
+        click(page, "Save");
+        screenshot(page, "bad-input-summary");
+
+        assertThat(viewText(page)).contains("Enter a valid date");
+        assertThat(service.listMine()).isEmpty();
     }
 
     @Test
-    void editingExistingReportUpdatesItsFields() {
-        var id = seedReport(LocalDate.of(2026, 7, 1), "before");
-        navigate(ReportDetailView.class, id);
+    void editingExistingReportUpdatesItsFields(UnifiedPage page) {
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "before");
+        page.navigate(ReportDetailView.class, id);
 
-        findTextArea().withLabel("Additional Info").setValue("after");
-        findDatePicker().withLabel("Report date").setValue(LocalDate.of(2026, 7, 20));
-        findButton().withText("Save").click();
+        textArea(page, "Additional Info").setValue("after");
+        page.find(UnifiedDatePicker.class).withLabel("Report date").single()
+                .setValue(LocalDate.of(2026, 7, 20));
+        screenshot(page, "edited");
+        click(page, "Save");
 
         var reloaded = service.findMine(id);
         assertThat(reloaded.additionalInformation()).isEqualTo("after");
@@ -129,42 +160,45 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void deletingADraftRemovesItAndReturnsToTheList() {
-        var id = seedReport(LocalDate.of(2026, 7, 1), "scratch");
-        navigate(ReportDetailView.class, id);
+    void deletingADraftRemovesItAndReturnsToTheList(UnifiedPage page) {
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "scratch");
+        page.navigate(ReportDetailView.class, id);
 
-        findButton().withText("Delete").click();          // opens the confirm dialog
-        findButton().withText("Delete report").click();   // confirms
+        click(page, "Delete");          // opens the confirm dialog
+        screenshot(page, "delete-confirm");
+        click(page, "Delete report");   // confirms
 
-        assertThat(getCurrentView()).isInstanceOf(MyReportsView.class);
+        assertThat(page).isAt(MyReportsView.class);
         assertThat(service.listMine()).noneMatch(r -> r.id().equals(id));
     }
 
     @Test
-    void newReportDoesNotOfferDelete() {
-        navigate(ReportDetailView.class);
+    void newReportDoesNotOfferDelete(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
 
         // Delete is hidden until the report is a persisted DRAFT.
-        assertThat(findButton().withText("Delete").exists()).isFalse();
+        assertThat(hasButton(page, "Delete")).isFalse();
     }
 
     @Test
-    void addingALineViaTheDialogUpdatesLiveTotalsAndPersistsOnSave() {
-        var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+    void addingALineViaTheDialogUpdatesLiveTotalsAndPersistsOnSave(UnifiedPage page) {
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "trip");
+        page.navigate(ReportDetailView.class, id);
 
-        findButton().withAriaLabel("Add expense").click();
-        findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
+        clickNamed(page, "Add expense");
+        comboBox(page, "Expense type")
                 .selectItem("Parking/supplies/goods");
-        findComboBox(VatRateDto.class).withLabel("VAT rate").selectItem("25.5 %");
-        findBigDecimalField().withLabel("Unit price")
+        comboBox(page, "VAT rate").selectItem("25.5 %");
+        bigDecimalField(page, "Unit price")
                 .setValue(new BigDecimal("100"));
-        saveExpense();
+        screenshot(page, "line-editor-filled");
+        saveDialog(page);
 
         // Live total bar reflects the added line before the report is saved.
-        assertThat(getCurrentView().getElement().getTextRecursively()).contains("€100.00");
+        assertThat(viewText(page)).contains("€100.00");
+        screenshot(page, "line-added");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var reloaded = service.findMine(id);
         assertThat(reloaded.lines()).hasSize(1);
@@ -173,136 +207,142 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void lineEditorDefaultsQuantityToOneAndShowsTheLineTotalLive() {
-        var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+    void lineEditorDefaultsQuantityToOneAndShowsTheLineTotalLive(UnifiedPage page) {
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "trip");
+        page.navigate(ReportDetailView.class, id);
 
-        findButton().withAriaLabel("Add expense").click();
+        clickNamed(page, "Add expense");
 
         // Quantity starts at 1, so the line total is the unit price itself.
-        assertThat(findBigDecimalField().withLabel("Quantity").getComponent().getValue())
+        assertThat(bigDecimalField(page, "Quantity").getValue())
                 .isEqualByComparingTo("1");
-        findBigDecimalField().withLabel("Unit price")
+        bigDecimalField(page, "Unit price")
                 .setValue(new BigDecimal("12.50"));
-        assertThat(findDialog().getComponent().getElement().getTextRecursively())
+        assertThat(dialogText(page))
                 .contains("Total").contains("€12.50");
 
         // Raising the quantity recomputes the total before anything is saved.
-        findBigDecimalField().withLabel("Quantity").setValue(new BigDecimal("3"));
-        assertThat(findDialog().getComponent().getElement().getTextRecursively()).contains("€37.50");
+        bigDecimalField(page, "Quantity").setValue(new BigDecimal("3"));
+        assertThat(dialogText(page)).contains("€37.50");
     }
 
     @Test
-    void lineEditorLaysItsFieldsOutAsTheDesignsTwoColumnGrid() {
+    void lineEditorLaysItsFieldsOutAsTheDesignsTwoColumnGrid(UnifiedPage page) {
         // docs/design/components/line-editor-dialog.md § Layout. Everything spans
         // both columns except unit price/quantity, which pair, and VAT rate, which
         // is drawn half width with the cell beside it deliberately empty.
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add expense").click();
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add expense");
+        screenshot(page, "line-editor");
 
-        var dialog = findDialog().getComponent();
-        assertThat(dialog.getWidth()).isEqualTo("26rem");
+        var dialog = dialog(page);
+        assertThat(dialog.element().getProperty("width")).isEqualTo("26rem");
 
-        var form = $(FormLayout.class).single();
-        // ResponsiveStep exposes no getters, only toJson() — so compare the
-        // serialised steps against the two the spec prescribes.
-        assertThat(form.getResponsiveSteps())
-                .extracting(step -> step.toJson().toString())
-                .containsExactly(
-                        new FormLayout.ResponsiveStep("0", 1).toJson().toString(),
-                        new FormLayout.ResponsiveStep("24rem", 2).toJson().toString());
+        var form = dialog.find(UnifiedFormLayout.class).single();
+        // The steps the spec prescribes, as minWidth:columns.
+        assertThat(form.getResponsiveSteps()).containsExactly("0:1", "24rem:2");
         assertThat(form.getColumnSpacing()).isEqualTo("var(--em-section-gap)");
         assertThat(form.getRowSpacing()).isEqualTo("var(--em-card-padding)");
 
-        assertThat(form.getColspan(comboBox("Expense type"))).isEqualTo(2);
-        assertThat(form.getColspan(bigDecimalField("Unit price"))).isEqualTo(1);
-        assertThat(form.getColspan(bigDecimalField("Quantity"))).isEqualTo(1);
-        assertThat(form.getColspan(comboBox("VAT rate"))).isEqualTo(1);
-        assertThat(form.getColspan(
-                findTextArea().withLabel("Comment").getComponent())).isEqualTo(2);
+        assertThat(colspan(comboBox(page, "Expense type"))).isEqualTo(2);
+        assertThat(colspan(bigDecimalField(page, "Unit price"))).isEqualTo(1);
+        assertThat(colspan(bigDecimalField(page, "Quantity"))).isEqualTo(1);
+        assertThat(colspan(comboBox(page, "VAT rate"))).isEqualTo(1);
+        assertThat(colspan(textArea(page, "Comment"))).isEqualTo(2);
         // The total row and the receipt block are grid children too, both full width.
-        assertThat(form.getColspan($(HorizontalLayout.class)
+        assertThat(colspan(form.find(UnifiedHorizontalLayout.class)
                 .withClassName("line-total-row").single())).isEqualTo(2);
-        assertThat(form.getColspan($(Upload.class).single().getParent().orElseThrow()))
-                .isEqualTo(2);
+        // The receipt block is the grid's one vertical layout, holding the Upload.
+        var receiptBlock = form.getChildren().stream()
+                .filter(child -> "vaadin-vertical-layout".equals(child.getTag()))
+                .toList();
+        assertThat(receiptBlock).singleElement().satisfies(block ->
+                assertThat(UnifiedFormLayout.colspanOf(block)).isEqualTo(2));
+        assertThat(form.find(UnifiedUpload.class).exists()).isTrue();
     }
 
     @Test
-    void lineEditorUsesTheDesignsFieldTypesAndCopy() {
+    void lineEditorUsesTheDesignsFieldTypesAndCopy(UnifiedPage page) {
         // Delta items 4, 9, 10, 11 of #175, plus the component mapping: the frame
         // hides the header close button, a third footer button and a checkbox.
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add expense").click();
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add expense");
 
-        var comment = findTextArea().withLabel("Comment").getComponent();
+        var comment = textArea(page, "Comment");
         assertThat(comment.getMinRows()).isEqualTo(2);
         assertThat(comment.getMaxLength()).isEqualTo(500);
 
-        assertThat(bigDecimalField("Unit price").getHelperText()).isEqualTo("Gross, each");
-        assertThat(findDialog().getComponent().getElement().getTextRecursively())
+        assertThat(bigDecimalField(page, "Unit price").getHelperText())
+                .isEqualTo("Gross, each");
+        assertThat(dialogText(page))
                 .contains("Total").doesNotContain("Line total");
 
-        assertThat(findButton().withText("Save").inside(findDialog()).exists()).isTrue();
-        assertThat(findButton().withText("Save expense").exists()).isFalse();
-        assertThat(findCheckbox().inside(findDialog()).exists()).isFalse();
+        assertThat(hasButton(dialog(page), "Save")).isTrue();
+        assertThat(hasButton(page, "Save expense")).isFalse();
+        assertThat(dialog(page).find(UnifiedCheckbox.class).exists()).isFalse();
     }
 
     @Test
-    void lineEditorShowsNoReceiptStatusUntilOneIsAttached() {
+    void lineEditorShowsNoReceiptStatusUntilOneIsAttached(UnifiedPage page) {
         // Delta item 12: the empty state carries no status text — the Upload control
         // already says it, and the design draws none.
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add expense").click();
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add expense");
 
-        assertThat(findDialog().getComponent().getElement().getTextRecursively())
+        assertThat(dialogText(page))
                 .doesNotContain("No receipt attached");
-        assertThat(findButton().withText("Remove").exists()).isFalse();
+        assertThat(hasButton(page, "Remove")).isFalse();
 
-        findUpload().upload("taxi.jpg", "image/jpeg", jpegBytes());
+        upload(page).upload("taxi.jpg", "image/jpeg", ReportFixtures.jpegBytes());
+        screenshot(page, "receipt-attached");
 
-        assertThat(findDialog().getComponent().getElement().getTextRecursively())
+        assertThat(dialogText(page))
                 .contains("taxi.jpg");
-        assertThat(findButton().withText("Remove").exists()).isTrue();
+        assertThat(hasButton(page, "Remove")).isTrue();
     }
 
     @Test
-    void lineEditorPutsTheUploadGlyphInTheDropLabelNotOnTheButton() {
+    void lineEditorPutsTheUploadGlyphInTheDropLabelNotOnTheButton(UnifiedPage page) {
         // Delta item 13, and iconography.md's Lucide-only rule (#163): the drawn
         // anatomy slots the glyph beside the drop label and leaves the button plain.
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add expense").click();
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add expense");
 
-        var upload = $(Upload.class).single();
-        assertThat(((Button) upload.getUploadButton()).getText())
-                .isEqualTo("Upload receipt\u2026");
-        // Plain text: the label's Text node and nothing else — no icon slot.
-        assertThat(upload.getUploadButton().getChildren())
-                .noneMatch(SvgIcon.class::isInstance);
-        assertThat(upload.getDropLabelIcon()).isInstanceOf(SvgIcon.class);
-        assertThat(((SvgIcon) upload.getDropLabelIcon()).getSymbol())
-                .isEqualTo(LucideIcon.UPLOAD.glyph());
+        var upload = upload(page);
+        var button = upload.find(UnifiedButton.class).single();
+        assertThat(button.getText()).isEqualTo("Upload receipt…");
+        // Plain text: the label's Text node and nothing else — no icon child.
+        assertThat(UnifiedElements.children(button.element())).isEmpty();
+        // The upload's one Lucide icon sits in the drop-label-icon slot.
+        var icons = upload.findComponent(SvgIcon.class).all().stream()
+                .filter(icon -> icon.element().getProperty("symbol") != null).toList();
+        assertThat(icons).singleElement().satisfies(icon -> {
+            assertThat(icon.element().getAttribute("slot")).isEqualTo("drop-label-icon");
+            assertThat(icon.element().getProperty("symbol"))
+                    .isEqualTo(LucideIcon.UPLOAD.glyph());
+        });
     }
 
     @Test
-    void aQuantityLinePersistsItsUnitPriceAndTotalsTheProduct() {
-        var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+    void aQuantityLinePersistsItsUnitPriceAndTotalsTheProduct(UnifiedPage page) {
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "trip");
+        page.navigate(ReportDetailView.class, id);
 
-        findButton().withAriaLabel("Add expense").click();
-        findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
+        clickNamed(page, "Add expense");
+        comboBox(page, "Expense type")
                 .selectItem("Parking/supplies/goods");
-        findComboBox(VatRateDto.class).withLabel("VAT rate").selectItem("25.5 %");
-        findBigDecimalField().withLabel("Unit price")
+        comboBox(page, "VAT rate").selectItem("25.5 %");
+        bigDecimalField(page, "Unit price")
                 .setValue(new BigDecimal("100"));
-        findBigDecimalField().withLabel("Quantity").setValue(new BigDecimal("3"));
-        saveExpense();
+        bigDecimalField(page, "Quantity").setValue(new BigDecimal("3"));
+        saveDialog(page);
 
         // The card shows the qty × unit = gross breakdown and the live total bar
         // reflects the product, both before the report is saved.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("3 × €100.00 = €300.00").contains("€300.00");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var line = service.findMine(id).lines().getFirst();
         assertThat(line.amount()).isEqualByComparingTo("100.00");     // unit price
@@ -311,49 +351,49 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aQuantityOneCardShowsNoQuantityBreakdown() {
+    void aQuantityOneCardShowsNoQuantityBreakdown(UnifiedPage page) {
         // The feature is invisible until used (ADR-0023).
-        var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "100.00");
-        navigate(ReportDetailView.class, id);
+        var id = fixtures.seedReportWithLine(LocalDate.of(2026, 7, 1), "100.00");
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("€100.00")
                 .doesNotContain("1 × €100.00");
     }
 
     @Test
-    void aNonPositiveQuantityIsBlockedWithAnErrorSummary() {
-        var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+    void aNonPositiveQuantityIsBlockedWithAnErrorSummary(UnifiedPage page) {
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "trip");
+        page.navigate(ReportDetailView.class, id);
 
-        findButton().withAriaLabel("Add expense").click();
-        findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
+        clickNamed(page, "Add expense");
+        comboBox(page, "Expense type")
                 .selectItem("Parking/supplies/goods");
-        findComboBox(VatRateDto.class).withLabel("VAT rate").selectItem("25.5 %");
-        findBigDecimalField().withLabel("Unit price")
+        comboBox(page, "VAT rate").selectItem("25.5 %");
+        bigDecimalField(page, "Unit price")
                 .setValue(new BigDecimal("100"));
-        findBigDecimalField().withLabel("Quantity").setValue(BigDecimal.ZERO);
+        bigDecimalField(page, "Quantity").setValue(BigDecimal.ZERO);
         // Always-enabled Save (ADR-0020): the click is allowed, the reason shows.
-        saveExpense();
+        saveDialog(page);
 
-        assertThat(findDialog().getComponent().getElement().getTextRecursively())
+        assertThat(dialogText(page))
                 .contains("Quantity must be greater than zero");
         assertThat(service.findMine(id).lines()).isEmpty();
     }
 
     @Test
-    void editingALineLoadsAndUpdatesItsQuantity() {
-        var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "50.00");
-        navigate(ReportDetailView.class, id);
+    void editingALineLoadsAndUpdatesItsQuantity(UnifiedPage page) {
+        var id = fixtures.seedReportWithLine(LocalDate.of(2026, 7, 1), "50.00");
+        page.navigate(ReportDetailView.class, id);
 
         // Open the existing (quantity-1) line and give it a quantity. The card body
         // itself carries the click listener (no Edit button), so click that.
-        openLineCardEditor();
-        assertThat(findBigDecimalField().withLabel("Quantity").getComponent().getValue())
+        openLineCardEditor(page);
+        assertThat(bigDecimalField(page, "Quantity").getValue())
                 .isEqualByComparingTo("1");
-        findBigDecimalField().withLabel("Quantity").setValue(new BigDecimal("4"));
-        saveExpense();
-        findButton().withText("Save").click();
+        bigDecimalField(page, "Quantity").setValue(new BigDecimal("4"));
+        saveDialog(page);
+        click(page, "Save");
 
         var line = service.findMine(id).lines().getFirst();
         assertThat(line.amount()).isEqualByComparingTo("50.00");
@@ -362,78 +402,77 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void lineEditorKeepsSaveEnabledAndBlocksAnEmptyLine() {
-        var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+    void lineEditorKeepsSaveEnabledAndBlocksAnEmptyLine(UnifiedPage page) {
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "trip");
+        page.navigate(ReportDetailView.class, id);
 
-        findButton().withAriaLabel("Add expense").click();
+        clickNamed(page, "Add expense");
         // Always-enabled Save (ADR-0020): clicking it with nothing filled must
         // not add a line — validation blocks it and the dialog stays open.
-        saveExpense();
+        saveDialog(page);
 
         // Dialog is still open (validation blocked the save) and its Save is still
         // enabled — never a disabled submit.
-        assertThat(findDialog().exists()).isTrue();
-        assertThat(findButton().withText("Save").inside(findDialog())
-                .getComponent().isEnabled()).isTrue();
+        assertThat(hasOpenDialog(page)).isTrue();
+        assertThat(buttons(dialog(page), "Save").single().isEnabled()).isTrue();
         // … and no line was added: the empty state still shows, nothing persisted.
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("No expenses yet");
         assertThat(service.findMine(id).lines()).isEmpty();
     }
 
     @Test
-    void submittingADraftWithALineLocksItReadOnly() {
-        var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+    void submittingADraftWithALineLocksItReadOnly(UnifiedPage page) {
+        var id = fixtures.seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
+        page.navigate(ReportDetailView.class, id);
 
-        findButton().withText("Submit for approval").click(); // opens the confirm dialog
-        findButton().withText("Submit report").click();       // confirms
+        click(page, "Submit for approval"); // opens the confirm dialog
+        click(page, "Submit report");       // confirms
 
         // The report is now SUBMITTED and read-only to the owner: the editing
         // affordances are gone and the status is shown as text (ADR-0020).
         assertThat(service.findMine(id).status()).isEqualTo(ReportStatus.SUBMITTED);
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("Submitted");
-        assertThat(findButton().withText("Save").exists()).isFalse();
-        assertThat(findButton().withText("Submit for approval").exists()).isFalse();
-        assertThat(findButton().withAriaLabel("Add expense").exists()).isFalse();
-        assertThat(findButton().withText("Delete").exists()).isFalse();
+        assertThat(hasButton(page, "Save")).isFalse();
+        assertThat(hasButton(page, "Submit for approval")).isFalse();
+        assertThat(hasNamed(page, "Add expense")).isFalse();
+        assertThat(hasButton(page, "Delete")).isFalse();
     }
 
     @Test
-    void submittingAnEmptyDraftShowsTheReasonAndStaysEnabled() {
-        var id = seedReport(LocalDate.of(2026, 7, 1), "empty");
-        navigate(ReportDetailView.class, id);
+    void submittingAnEmptyDraftShowsTheReasonAndStaysEnabled(UnifiedPage page) {
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "empty");
+        page.navigate(ReportDetailView.class, id);
 
         // Always-enabled Submit (ADR-0020): a zero-line submit is blocked with the
         // reason in the top-of-form error summary, not a silent no-op. The report
         // date is valid, so the confirm dialog opens; the domain guard fires on
         // confirm and the atomic save+submit rolls back (issue #81).
-        findButton().withText("Submit for approval").click();
-        findButton().withText("Submit report").click();
+        click(page, "Submit for approval");
+        click(page, "Submit report");
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("at least one line");
         assertThat(service.findMine(id).status()).isEqualTo(ReportStatus.DRAFT);
         // Submit button is still there (never disabled) so the owner can retry.
-        assertThat(findButton().withText("Submit for approval").exists()).isTrue();
+        assertThat(hasButton(page, "Submit for approval")).isTrue();
     }
 
     // --- Submit saves the current state + confirmation dialog (issue #81) ---
 
     @Test
-    void submittingPersistsAReportLevelEditThatWasNotSavedFirst() {
-        var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+    void submittingPersistsAReportLevelEditThatWasNotSavedFirst(UnifiedPage page) {
+        var id = fixtures.seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
+        page.navigate(ReportDetailView.class, id);
 
         // Edit a report-level field but never click Save — the edit lives only in
         // the working copy until the submit persists it (issue #81).
-        findTextArea().withLabel("Additional Info")
+        textArea(page, "Additional Info")
                 .setValue("edited but not saved");
 
-        findButton().withText("Submit for approval").click(); // opens the confirm dialog
-        findButton().withText("Submit report").click();       // confirms
+        click(page, "Submit for approval"); // opens the confirm dialog
+        click(page, "Submit report");       // confirms
 
         var reloaded = service.findMine(id);
         assertThat(reloaded.status()).isEqualTo(ReportStatus.SUBMITTED);
@@ -441,23 +480,23 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void submittingPersistsALineAddedButNotSavedFirst() {
+    void submittingPersistsALineAddedButNotSavedFirst(UnifiedPage page) {
         // A seed with no lines: before issue #81 a line added in the dialog but not
         // Saved was lost on submit, so the submit failed the "≥1 line" guard. Now
         // the submit saves the pending line first, so it succeeds.
-        var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "trip");
+        page.navigate(ReportDetailView.class, id);
 
-        findButton().withAriaLabel("Add expense").click();
-        findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
+        clickNamed(page, "Add expense");
+        comboBox(page, "Expense type")
                 .selectItem("Parking/supplies/goods");
-        findComboBox(VatRateDto.class).withLabel("VAT rate").selectItem("25.5 %");
-        findBigDecimalField().withLabel("Unit price")
+        comboBox(page, "VAT rate").selectItem("25.5 %");
+        bigDecimalField(page, "Unit price")
                 .setValue(new BigDecimal("100"));
-        saveExpense();
+        saveDialog(page);
 
-        findButton().withText("Submit for approval").click();
-        findButton().withText("Submit report").click();
+        click(page, "Submit for approval");
+        click(page, "Submit report");
 
         var reloaded = service.findMine(id);
         assertThat(reloaded.status()).isEqualTo(ReportStatus.SUBMITTED);
@@ -466,116 +505,117 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void cancellingTheSubmitConfirmationLeavesItAnEditableDraft() {
-        var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+    void cancellingTheSubmitConfirmationLeavesItAnEditableDraft(UnifiedPage page) {
+        var id = fixtures.seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
+        page.navigate(ReportDetailView.class, id);
 
-        findButton().withText("Submit for approval").click(); // opens the dialog
-        findButton().withText("Cancel").click();              // backs out
+        click(page, "Submit for approval"); // opens the dialog
+        click(page, "Cancel");              // backs out
 
         // Nothing submitted: still an editable DRAFT with both actions offered.
         assertThat(service.findMine(id).status()).isEqualTo(ReportStatus.DRAFT);
-        assertThat(findButton().withText("Submit for approval").exists()).isTrue();
-        assertThat(findButton().withText("Save").exists()).isTrue();
+        assertThat(hasButton(page, "Submit for approval")).isTrue();
+        assertThat(hasButton(page, "Save")).isTrue();
     }
 
     @Test
-    void submittingWithNoReportDateBlocksBeforeConfirming() {
-        var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+    void submittingWithNoReportDateBlocksBeforeConfirming(UnifiedPage page) {
+        var id = fixtures.seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
+        page.navigate(ReportDetailView.class, id);
 
         // Clearing the required date must block the submit at validation — the
         // confirm dialog never opens and nothing transitions.
-        $(DatePicker.class).first().clear();
-        findButton().withText("Submit for approval").click();
+        page.find(UnifiedDatePicker.class).withLabel("Report date").single().clear();
+        click(page, "Submit for approval");
 
-        assertThat(findButton().withText("Submit report").exists()).isFalse();
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(hasButton(page, "Submit report")).isFalse();
+        assertThat(viewText(page))
                 .contains("Report date is required");
         assertThat(service.findMine(id).status()).isEqualTo(ReportStatus.DRAFT);
     }
 
     @Test
-    void aRejectedReportShowsTheRealReasonRejecterAndDateToTheOwner() {
-        var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100",
+    void aRejectedReportShowsTheRealReasonRejecterAndDateToTheOwner(UnifiedPage page) {
+        var id = fixtures.seedRejectedReport(LocalDate.of(2026, 7, 1), "100",
                 "Please attach the hotel receipt.");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The owner's callout carries the real reason, who rejected it (the seeded
         // admin), and when — replacing the placeholder note. The reason and the
         // rejecter also appear in the status-history audit trail below.
-        var text = getCurrentView().getElement().getTextRecursively();
+        var text = viewText(page);
         assertThat(text).contains("Rejected — changes requested",
                 "Please attach the hotel receipt.", "Expense Admin", "14 Jul 2026");
-        assertThat(text).contains("Status history");
+        // Ignoring case: .section-label is uppercased in CSS, which a browser's text shows.
+        assertThat(text).containsIgnoringCase("Status history");
         // A rejected report is editable again (owner can resubmit), so Save shows.
-        assertThat(findButton().withText("Save").exists()).isTrue();
+        assertThat(hasButton(page, "Save")).isTrue();
     }
 
     // --- Resubmit a rejected report (Phase 5.5) ---
 
     @Test
-    void aRejectedReportOffersResubmitNotSubmit() {
-        var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Fix the total.");
-        navigate(ReportDetailView.class, id);
+    void aRejectedReportOffersResubmitNotSubmit(UnifiedPage page) {
+        var id = fixtures.seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Fix the total.");
+        page.navigate(ReportDetailView.class, id);
 
         // The forward action is relabelled "Resubmit" on a REJECTED report; the
         // first-submit label is gone (same button, flipped by status).
-        assertThat(findButton().withText("Resubmit").exists()).isTrue();
-        assertThat(findButton().withText("Submit for approval").exists()).isFalse();
+        assertThat(hasButton(page, "Resubmit")).isTrue();
+        assertThat(hasButton(page, "Submit for approval")).isFalse();
     }
 
     @Test
-    void resubmitIsNotOfferedOnDraftSubmittedOrApproved() {
+    void resubmitIsNotOfferedOnDraftSubmittedOrApproved(UnifiedPage page) {
         // DRAFT offers the first-submit label, never "Resubmit".
-        var draft = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, draft);
-        assertThat(findButton().withText("Submit for approval").exists()).isTrue();
-        assertThat(findButton().withText("Resubmit").exists()).isFalse();
+        var draft = fixtures.seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
+        page.navigate(ReportDetailView.class, draft);
+        assertThat(hasButton(page, "Submit for approval")).isTrue();
+        assertThat(hasButton(page, "Resubmit")).isFalse();
 
         // SUBMITTED is read-only — no forward action of either label.
-        var submitted = seedSubmittedReport(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, submitted);
-        assertThat(findButton().withText("Resubmit").exists()).isFalse();
-        assertThat(findButton().withText("Submit for approval").exists()).isFalse();
+        var submitted = fixtures.seedSubmittedReport(LocalDate.of(2026, 7, 1), "60.00");
+        page.navigate(ReportDetailView.class, submitted);
+        assertThat(hasButton(page, "Resubmit")).isFalse();
+        assertThat(hasButton(page, "Submit for approval")).isFalse();
 
         // APPROVED is terminal and read-only — likewise no forward action.
-        var approved = seedApprovedReport(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, approved);
-        assertThat(findButton().withText("Resubmit").exists()).isFalse();
-        assertThat(findButton().withText("Submit for approval").exists()).isFalse();
+        var approved = fixtures.seedApprovedReport(LocalDate.of(2026, 7, 1), "60.00");
+        page.navigate(ReportDetailView.class, approved);
+        assertThat(hasButton(page, "Resubmit")).isFalse();
+        assertThat(hasButton(page, "Submit for approval")).isFalse();
     }
 
     @Test
-    void resubmittingARejectedReportSendsItBackToSubmittedAndLocksItReadOnly() {
-        var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Fix the total.");
-        navigate(ReportDetailView.class, id);
+    void resubmittingARejectedReportSendsItBackToSubmittedAndLocksItReadOnly(UnifiedPage page) {
+        var id = fixtures.seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Fix the total.");
+        page.navigate(ReportDetailView.class, id);
 
-        findButton().withText("Resubmit").click();         // opens the confirm dialog
-        findButton().withText("Resubmit report").click();  // confirms
+        click(page, "Resubmit");         // opens the confirm dialog
+        click(page, "Resubmit report");  // confirms
 
         // Back through the queue: REJECTED → SUBMITTED, and read-only to the owner
         // again (the editing affordances and the forward action are gone).
         assertThat(service.findMine(id).status()).isEqualTo(ReportStatus.SUBMITTED);
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("Submitted");
-        assertThat(findButton().withText("Resubmit").exists()).isFalse();
-        assertThat(findButton().withText("Save").exists()).isFalse();
-        assertThat(findButton().withAriaLabel("Add expense").exists()).isFalse();
+        assertThat(hasButton(page, "Resubmit")).isFalse();
+        assertThat(hasButton(page, "Save")).isFalse();
+        assertThat(hasNamed(page, "Add expense")).isFalse();
     }
 
     @Test
-    void resubmittingPersistsAnEditThatWasNotSavedFirst() {
-        var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Add detail.");
-        navigate(ReportDetailView.class, id);
+    void resubmittingPersistsAnEditThatWasNotSavedFirst(UnifiedPage page) {
+        var id = fixtures.seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Add detail.");
+        page.navigate(ReportDetailView.class, id);
 
         // Address the feedback but don't click Save — the resubmit must save it
         // as part of the transition (issue #81).
-        findTextArea().withLabel("Additional Info")
+        textArea(page, "Additional Info")
                 .setValue("addressed the feedback");
 
-        findButton().withText("Resubmit").click();
-        findButton().withText("Resubmit report").click();
+        click(page, "Resubmit");
+        click(page, "Resubmit report");
 
         var reloaded = service.findMine(id);
         assertThat(reloaded.status()).isEqualTo(ReportStatus.SUBMITTED);
@@ -583,63 +623,63 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void resubmittingAnEmptyRejectedReportShowsTheReasonAndStaysEnabled() {
-        var id = seedEmptyRejectedReport(LocalDate.of(2026, 7, 1), "Fix the total.");
-        navigate(ReportDetailView.class, id);
+    void resubmittingAnEmptyRejectedReportShowsTheReasonAndStaysEnabled(UnifiedPage page) {
+        var id = fixtures.seedEmptyRejectedReport(LocalDate.of(2026, 7, 1), "Fix the total.");
+        page.navigate(ReportDetailView.class, id);
 
         // Always-enabled Resubmit (ADR-0020): a zero-line resubmit is blocked with
         // the reason in the top-of-form error summary, not a silent no-op. The
         // confirm dialog opens (the date is valid); the domain guard fires on
         // confirm and the atomic save+resubmit rolls back (issue #81).
-        findButton().withText("Resubmit").click();
-        findButton().withText("Resubmit report").click();
+        click(page, "Resubmit");
+        click(page, "Resubmit report");
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("at least one line");
         assertThat(service.findMine(id).status()).isEqualTo(ReportStatus.REJECTED);
         // The button is still there (never disabled) so the owner can add a line and retry.
-        assertThat(findButton().withText("Resubmit").exists()).isTrue();
+        assertThat(hasButton(page, "Resubmit")).isTrue();
     }
 
     @Test
-    void anAlreadySubmittedReportOpensReadOnly() {
-        var id = seedSubmittedReport(LocalDate.of(2026, 7, 1), "80.00");
-        navigate(ReportDetailView.class, id);
+    void anAlreadySubmittedReportOpensReadOnly(UnifiedPage page) {
+        var id = fixtures.seedSubmittedReport(LocalDate.of(2026, 7, 1), "80.00");
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("Submitted");
-        assertThat(findButton().withText("Save").exists()).isFalse();
-        assertThat(findButton().withText("Submit for approval").exists()).isFalse();
-        assertThat(findButton().withText("Delete").exists()).isFalse();
-        assertThat(findButton().withAriaLabel("Add expense").exists()).isFalse();
+        assertThat(hasButton(page, "Save")).isFalse();
+        assertThat(hasButton(page, "Submit for approval")).isFalse();
+        assertThat(hasButton(page, "Delete")).isFalse();
+        assertThat(hasNamed(page, "Add expense")).isFalse();
         // The line is shown but carries no ⋮ menu at all — not a disabled one.
-        assertThat($(RowActionMenu.class).all()).isEmpty();
+        assertThat(rowMenus(page)).isEmpty();
     }
 
     @Test
-    void uploadingAReceiptOnAnUnsavedReportPersistsItOnFirstSave() {
+    void uploadingAReceiptOnAnUnsavedReportPersistsItOnFirstSave(UnifiedPage page) {
         // Brand-new, never-saved report: the receipt attaches at any time, no
         // "save first" gate (ADR-0021 overrides ADR-0019's save-before-attach).
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
 
-        findButton().withAriaLabel("Add expense").click();
-        findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
+        clickNamed(page, "Add expense");
+        comboBox(page, "Expense type")
                 .selectItem("Parking/supplies/goods");
-        findComboBox(VatRateDto.class).withLabel("VAT rate").selectItem("25.5 %");
-        findBigDecimalField().withLabel("Unit price")
+        comboBox(page, "VAT rate").selectItem("25.5 %");
+        bigDecimalField(page, "Unit price")
                 .setValue(new BigDecimal("100"));
         // Drive the real UploadHandler: bytes are validated server-side by magic
         // bytes and buffered in memory (the browser mime is not trusted).
-        findUpload().upload("taxi.jpg", "image/jpeg", jpegBytes());
-        saveExpense();
+        upload(page).upload("taxi.jpg", "image/jpeg", ReportFixtures.jpegBytes());
+        saveDialog(page);
 
         // The card reflects the buffered receipt before the report is even saved —
         // as an image thumbnail (its filename is the accessible name), matching how
         // a persisted receipt renders (issue #89).
-        assertThat(findButton().withAriaLabel("Preview receipt: taxi.jpg").exists())
+        assertThat(hasNamed(page, "Preview receipt: taxi.jpg"))
                 .isTrue();
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var mine = service.listMine();
         assertThat(mine).hasSize(1);
@@ -650,113 +690,117 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aMislabeledUploadIsRejectedAndNothingIsBuffered() {
-        var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+    void aMislabeledUploadIsRejectedAndNothingIsBuffered(UnifiedPage page) {
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "trip");
+        page.navigate(ReportDetailView.class, id);
 
-        findButton().withAriaLabel("Add expense").click();
-        findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
+        clickNamed(page, "Add expense");
+        comboBox(page, "Expense type")
                 .selectItem("Parking/supplies/goods");
-        findComboBox(VatRateDto.class).withLabel("VAT rate").selectItem("25.5 %");
-        findBigDecimalField().withLabel("Unit price")
+        comboBox(page, "VAT rate").selectItem("25.5 %");
+        bigDecimalField(page, "Unit price")
                 .setValue(new BigDecimal("100"));
         // A text file renamed to .jpg: magic-byte check rejects it at upload; the
         // control is never disabled, the reason is surfaced instead (ADR-0020).
-        findUpload().upload("fake.jpg", "image/jpeg", "not an image".getBytes());
-        saveExpense();
-        findButton().withText("Save").click();
+        upload(page).upload("fake.jpg", "image/jpeg", "not an image".getBytes());
+        saveDialog(page);
+        click(page, "Save");
 
         // The line saved, but with no receipt — the rejected bytes were dropped.
         assertThat(service.findMine(id).lines().getFirst().hasReceipt()).isFalse();
     }
 
     @Test
-    void aSubmittedReportShowsTheReceiptSummaryButOffersNoUpload() {
-        var id = seedSubmittedReportWithReceipt(LocalDate.of(2026, 7, 1), "50.00",
+    void aSubmittedReportShowsTheReceiptSummaryButOffersNoUpload(UnifiedPage page) {
+        var id = fixtures.seedSubmittedReportWithReceipt(LocalDate.of(2026, 7, 1), "50.00",
                 "hotel.jpg");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The receipt is viewable (read path, ADR-0021): its image preview shows
         // even on a read-only report. But every mutation surface is gone — no Add
         // expense to open the editor, so the receipt cannot be changed.
-        assertThat(findButton().withAriaLabel("Preview receipt: hotel.jpg").exists())
+        assertThat(hasNamed(page, "Preview receipt: hotel.jpg"))
                 .isTrue();
-        assertThat(findButton().withAriaLabel("Add expense").exists()).isFalse();
-        assertThat($(RowActionMenu.class).all()).isEmpty();
+        assertThat(hasNamed(page, "Add expense")).isFalse();
+        assertThat(rowMenus(page)).isEmpty();
     }
 
     @Test
-    void aSavedImageReceiptRendersAnEnlargeablePreview() {
+    void aSavedImageReceiptRendersAnEnlargeablePreview(UnifiedPage page) {
         // A persisted image receipt: the card shows a keyboard-operable thumbnail
         // button (accessible name) that streams from the DB and enlarges in a
         // dialog (ADR-0021 / ADR-0020) — visible even on a read-only report.
-        var id = seedSubmittedReportWithReceipt(LocalDate.of(2026, 7, 1), "50.00",
+        var id = fixtures.seedSubmittedReportWithReceipt(LocalDate.of(2026, 7, 1), "50.00",
                 "hotel.jpg");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(findButton().withAriaLabel("Preview receipt: hotel.jpg").exists())
+        assertThat(hasNamed(page, "Preview receipt: hotel.jpg"))
                 .isTrue();
-        assertThat($(Image.class).exists()).isTrue();
+        // Since #172 a row shows a paperclip chip, not a thumbnail; activating it must
+        // enlarge the receipt image itself.
+        assertPreviewEnlarges(page, "hotel.jpg");
     }
 
     @Test
-    void aSavedPdfReceiptOffersAnOpenAffordance() {
-        var id = seedReportWithReceipt(LocalDate.of(2026, 7, 1), "70.00",
-                "invoice.pdf", pdfBytes());
-        navigate(ReportDetailView.class, id);
+    void aSavedPdfReceiptOffersAnOpenAffordance(UnifiedPage page) {
+        var id = fixtures.seedReportWithReceipt(LocalDate.of(2026, 7, 1), "70.00",
+                "invoice.pdf", ReportFixtures.pdfBytes());
+        page.navigate(ReportDetailView.class, id);
 
         // A PDF is not thumbnailed. On a row it is the design's chip — a paperclip
         // and the filename — and activating it still opens the browser's PDF viewer
         // in a new tab (ADR-0021); the "open" verb moved to the accessible name.
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("invoice.pdf");
-        assertThat($(Anchor.class).withClassName("expense-row-attachment")
-                .single().getElement().getAttribute("aria-label"))
+        assertThat(page.findComponent(Anchor.class).withClassName("expense-row-attachment")
+                .single().element().getAttribute("aria-label"))
                 .isEqualTo("Open receipt: invoice.pdf");
     }
 
     @Test
-    void anUnsavedImageAttachmentPreviewsFromBufferedBytes() {
+    void anUnsavedImageAttachmentPreviewsFromBufferedBytes(UnifiedPage page) {
         // Brand-new report, receipt attached but nothing saved yet: the editor
         // previews the buffered bytes directly (no DB round-trip, no receipt id).
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
 
-        findButton().withAriaLabel("Add expense").click();
-        findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
+        clickNamed(page, "Add expense");
+        comboBox(page, "Expense type")
                 .selectItem("Parking/supplies/goods");
-        findComboBox(VatRateDto.class).withLabel("VAT rate").selectItem("25.5 %");
-        findBigDecimalField().withLabel("Unit price")
+        comboBox(page, "VAT rate").selectItem("25.5 %");
+        bigDecimalField(page, "Unit price")
                 .setValue(new BigDecimal("100"));
-        findUpload().upload("taxi.jpg", "image/jpeg", jpegBytes());
+        upload(page).upload("taxi.jpg", "image/jpeg", ReportFixtures.jpegBytes());
 
         // The preview affordance appears in the still-open dialog, before any save.
-        assertThat(findButton().withAriaLabel("Preview receipt: taxi.jpg").exists())
+        assertThat(hasNamed(page, "Preview receipt: taxi.jpg"))
                 .isTrue();
     }
 
     @Test
-    void anUnsavedImageAttachmentPreviewsOnTheCardBeforeSave() {
+    void anUnsavedImageAttachmentPreviewsOnTheCardBeforeSave(UnifiedPage page) {
         // Issue #89: after the line editor closes, the card must show the image
         // thumbnail from the buffered bytes right away — not only after the report
         // is saved (previously the card showed just a "📎 filename" chip until the
         // receipt was persisted and had an id).
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
 
-        findButton().withAriaLabel("Add expense").click();
-        findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
+        clickNamed(page, "Add expense");
+        comboBox(page, "Expense type")
                 .selectItem("Parking/supplies/goods");
-        findComboBox(VatRateDto.class).withLabel("VAT rate").selectItem("25.5 %");
-        findBigDecimalField().withLabel("Unit price")
+        comboBox(page, "VAT rate").selectItem("25.5 %");
+        bigDecimalField(page, "Unit price")
                 .setValue(new BigDecimal("100"));
-        findUpload().upload("taxi.jpg", "image/jpeg", jpegBytes());
-        saveExpense();
+        upload(page).upload("taxi.jpg", "image/jpeg", ReportFixtures.jpegBytes());
+        saveDialog(page);
 
         // Dialog is closed; the preview button now belongs to the line card, and it
         // renders before the report has ever been saved (no receipt id yet).
-        assertThat(findDialog().exists()).isFalse();
-        assertThat(findButton().withAriaLabel("Preview receipt: taxi.jpg").exists())
+        assertThat(hasOpenDialog(page)).isFalse();
+        assertThat(hasNamed(page, "Preview receipt: taxi.jpg"))
                 .isTrue();
-        assertThat($(Image.class).exists()).isTrue();
+        // Since #172 a row shows a paperclip chip, not a thumbnail; activating it must
+        // enlarge the receipt image itself.
+        assertPreviewEnlarges(page, "taxi.jpg");
     }
 
     // --- Travel Calculator / domestic per-diem (Phase 4.2/4.3) ---
@@ -772,32 +816,32 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     private static final String TRIP = "Client visit";
 
     @Test
-    void insertingADomesticTripPreviewsGeneratesAndPersistsThePerDiem() {
-        navigate(ReportDetailView.class);
+    void insertingADomesticTripPreviewsGeneratesAndPersistsThePerDiem(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
 
-        findButton().withAriaLabel("Add travel").click();
-        findDateTimePicker().withLabel("Departure").setValue(DEP);
-        findDateTimePicker().withLabel("Return").setValue(DEP.plusHours(11));
-        findComboBox(String.class).withLabel("Destination country")
+        clickNamed(page, "Add travel");
+        dateTimePicker(page, "Departure").setValue(DEP);
+        dateTimePicker(page, "Return").setValue(DEP.plusHours(11));
+        comboBox(page, "Destination country")
                 .selectItem("Finland (domestic)");
-        findTextField().withLabel("Destinations").setValue("Helsinki");
-        findTextField().withLabel("Travel purpose").setValue("Client visit");
+        textField(page, "Destinations").setValue("Helsinki");
+        textField(page, "Travel purpose").setValue("Client visit");
 
         // The per-diem previews live as the dates are filled — no separate compute
         // step (11 h → one full day €54). The preview lives in the dialog overlay
-        // (attached to the UI, not the view), so assert against the whole UI tree.
-        assertThat(UI.getCurrent().getElement().getTextRecursively())
+        // (outside the view), so assert against the open dialog's text.
+        assertThat(dialogText(page))
                 .contains("Per diem allowance (full day)", "€54.00", "Trip total");
 
-        saveTrip();
+        saveDialog(page);
 
         // The trip card + the live "Per diem allowance" subtotal row appear before
         // the report is even saved.
-        var text = getCurrentView().getElement().getTextRecursively();
+        var text = viewText(page);
         assertThat(text).contains("Client visit", "Helsinki, Finland",
                 "Per diem allowance", "€54.00");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var mine = service.listMine();
         assertThat(mine).hasSize(1);
@@ -808,30 +852,30 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void insertingAForeignTripCostsThePerDiemAgainstTheDestinationCountry() {
-        navigate(ReportDetailView.class);
+    void insertingAForeignTripCostsThePerDiemAgainstTheDestinationCountry(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
 
-        findButton().withAriaLabel("Add travel").click();
-        findDateTimePicker().withLabel("Departure").setValue(DEP);
-        findDateTimePicker().withLabel("Return").setValue(DEP.plusHours(11));
+        clickNamed(page, "Add travel");
+        dateTimePicker(page, "Departure").setValue(DEP);
+        dateTimePicker(page, "Return").setValue(DEP.plusHours(11));
         // The picker lists the seeded foreign countries alongside Finland; pick one.
-        var country = findComboBox(String.class).withLabel("Destination country");
-        assertThat(country.getSuggestions())
+        var country = comboBox(page, "Destination country");
+        assertThat(country.getItems())
                 .contains("Finland (domestic)", "Germany", "Sweden");
         country.selectItem("Germany");
-        findTextField().withLabel("Destinations").setValue("Berlin");
-        findTextField().withLabel("Travel purpose").setValue("Conference");
+        textField(page, "Destinations").setValue("Berlin");
+        textField(page, "Travel purpose").setValue("Conference");
 
         // Costed against Germany's €71.00/day, not the Finnish €54.00.
-        assertThat(UI.getCurrent().getElement().getTextRecursively())
+        assertThat(dialogText(page))
                 .contains("Per diem allowance (full day)", "€71.00", "Germany");
 
-        saveTrip();
+        saveDialog(page);
         // The chosen country shows on the Trip & Allowance card ("destinations, country").
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("Berlin, Germany", "€71.00");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var loaded = service.findMine(service.listMine().getFirst().id());
         assertThat(loaded.travels().getFirst().country()).isEqualTo("Germany");
@@ -839,60 +883,60 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aTripCannotBeSavedWithNoDestinationCountryChosen() {
-        navigate(ReportDetailView.class);
+    void aTripCannotBeSavedWithNoDestinationCountryChosen(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
 
-        findButton().withAriaLabel("Add travel").click();
-        findDateTimePicker().withLabel("Departure").setValue(DEP);
-        findDateTimePicker().withLabel("Return").setValue(DEP.plusHours(11));
-        findTextField().withLabel("Destinations").setValue("Helsinki");
-        findTextField().withLabel("Travel purpose").setValue("Client visit");
+        clickNamed(page, "Add travel");
+        dateTimePicker(page, "Departure").setValue(DEP);
+        dateTimePicker(page, "Return").setValue(DEP.plusHours(11));
+        textField(page, "Destinations").setValue("Helsinki");
+        textField(page, "Travel purpose").setValue("Client visit");
         // Country left unchosen: Save surfaces a clear message and generates nothing.
-        saveTrip();
+        saveDialog(page);
 
-        assertThat(UI.getCurrent().getElement().getTextRecursively())
+        assertThat(dialogText(page))
                 .contains("Destination country is required");
-        assertThat(findButton().withText("Save").inside(findDialog()).exists()).isTrue();
-        assertThat(findSpan().withText("Per diem allowance").exists()).isFalse();
+        assertThat(hasButton(dialog(page), "Save")).isTrue();
+        assertThat(hasSpan(page, "Per diem allowance")).isFalse();
     }
 
     @Test
-    void insertingATripWithKmMealParkingShowsEachSubtotalAndFoldsParkingIntoNetVat() {
-        navigate(ReportDetailView.class);
+    void insertingATripWithKmMealParkingShowsEachSubtotalAndFoldsParkingIntoNetVat(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
 
-        findButton().withAriaLabel("Add travel").click();
-        findDateTimePicker().withLabel("Departure").setValue(DEP);
-        findDateTimePicker().withLabel("Return").setValue(DEP.plusHours(11));
-        findComboBox(String.class).withLabel("Destination country")
+        clickNamed(page, "Add travel");
+        dateTimePicker(page, "Departure").setValue(DEP);
+        dateTimePicker(page, "Return").setValue(DEP.plusHours(11));
+        comboBox(page, "Destination country")
                 .selectItem("Finland (domestic)");
-        findTextField().withLabel("Destinations").setValue("Helsinki");
-        findTextField().withLabel("Travel purpose").setValue("Client visit");
-        findBigDecimalField().withLabel("Kilometre allowance (km)")
+        textField(page, "Destinations").setValue("Helsinki");
+        textField(page, "Travel purpose").setValue("Client visit");
+        bigDecimalField(page, "Kilometre allowance (km)")
                 .setValue(new BigDecimal("120"));
         // A meal allowance is only paid when no per-diem applies (issue #93), so
         // clicking it marks the trip not eligible — the per-diem line drops out and
         // the meal-allowance line takes its place.
-        findCheckbox().withLabel("Pay meal allowance?").click();
-        findBigDecimalField().withLabel("Parking fees (€)")
+        checkbox(page, "Pay meal allowance?").check();
+        bigDecimalField(page, "Parking fees (€)")
                 .setValue(new BigDecimal("12.00"));
 
         // The remaining outputs preview live in the dialog (120 km × €0.55 = €66.00,
         // etc.); no per-diem, since the trip is now not eligible for one.
-        var previewText = UI.getCurrent().getElement().getTextRecursively();
+        var previewText = dialogText(page);
         assertThat(previewText).contains("Kilometre allowance", "€66.00",
                 "Meal allowance", "€13.50", "Parking", "€12.00");
         assertThat(previewText).doesNotContain("Per diem allowance");
 
-        saveTrip();
+        saveDialog(page);
 
         // The two new tax-free subtotal rows are visible; parking is not a subtotal.
-        assertThat(findSpan().withText("Kilometre allowance").exists()).isTrue();
-        assertThat(findSpan().withText("Meal allowance").exists()).isTrue();
-        assertThat(findSpan().withText("Per diem allowance").exists()).isFalse();
-        var text = getCurrentView().getElement().getTextRecursively();
+        assertThat(hasSpan(page, "Kilometre allowance")).isTrue();
+        assertThat(hasSpan(page, "Meal allowance")).isTrue();
+        assertThat(hasSpan(page, "Per diem allowance")).isFalse();
+        var text = viewText(page);
         assertThat(text).contains("€66.00", "€13.50");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var loaded = service.findMine(service.listMine().getFirst().id());
         assertThat(loaded.perDiemTotal()).isEqualByComparingTo("0.00");
@@ -904,14 +948,14 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void theKilometreLineCardShowsTheKmTimesRateBreakdown() {
+    void theKilometreLineCardShowsTheKmTimesRateBreakdown(UnifiedPage page) {
         // 12.5 km × the seeded 2026 rate (€0.550/km) = €6.88 — the km line reads like
         // a multi-unit manual card (ADR-0023), and the euros are unchanged.
-        var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
+        var id = fixtures.seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("12.5"), false, BigDecimal.ZERO);
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("12.5 × €0.55 = €6.88");
         // The flat per-diem line on the same trip carries no breakdown (quantity 1).
         assertThat(shown).contains("€54.00").doesNotContain("1 × €54.00");
@@ -926,22 +970,22 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void reCostingATripUpdatesItsKilometreCardWithoutLeavingAStaleOne() {
-        var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
+    void reCostingATripUpdatesItsKilometreCardWithoutLeavingAStaleOne(UnifiedPage page) {
+        var id = fixtures.seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("12.5"), false, BigDecimal.ZERO);
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Re-cost the trip through its editor: 12.5 km → 120 km.
-        clickRowAction(TRIP, "Edit");
-        findBigDecimalField().withLabel("Kilometre allowance (km)")
+        clickRowAction(page, TRIP, "Edit");
+        bigDecimalField(page, "Kilometre allowance (km)")
                 .setValue(new BigDecimal("120"));
-        saveTrip();
+        saveDialog(page);
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("120 × €0.55 = €66.00")
                 .doesNotContain("12.5 × €0.55");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var loaded = service.findMine(id);
         assertThat(loaded.kilometreTotal()).isEqualByComparingTo("66.00");
@@ -949,39 +993,41 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aTripWithoutKmOrMealHidesThoseSubtotalRows() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+    void aTripWithoutKmOrMealHidesThoseSubtotalRows(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
+        page.navigate(ReportDetailView.class, id);
 
         // Per-diem-only trip: its row shows, but the km/meal rows stay hidden.
-        assertThat(findSpan().withText("Per diem allowance").exists()).isTrue();
-        assertThat(findSpan().withText("Kilometre allowance").exists()).isFalse();
-        assertThat(findSpan().withText("Meal allowance").exists()).isFalse();
+        assertThat(hasSpan(page, "Per diem allowance")).isTrue();
+        assertThat(hasSpan(page, "Kilometre allowance")).isFalse();
+        assertThat(hasSpan(page, "Meal allowance")).isFalse();
     }
 
     @Test
-    void aTripListsItsGeneratedLinesAndAReceiptCanBeAttachedToOne() {
-        var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
+    void aTripListsItsGeneratedLinesAndAReceiptCanBeAttachedToOne(UnifiedPage page) {
+        var id = fixtures.seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("120"), true, new BigDecimal("12.00"));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Each earned line is listed under the trip with an attach affordance.
-        assertThat(rowActions("Per diem allowance (full day)"))
+        assertThat(rowActions(page, "Per diem allowance (full day)"))
                 .contains("Add receipt");
-        assertThat(rowActions("Parking")).contains("Add receipt");
+        assertThat(rowActions(page, "Parking")).contains("Add receipt");
 
         // Attach a receipt to the parking line via its focused editor.
-        clickRowAction("Parking", "Add receipt");
-        findUpload().upload("parking.jpg", "image/jpeg", jpegBytes());
-        findButton().withText("Save receipt").click();
+        clickRowAction(page, "Parking", "Add receipt");
+        upload(page).upload("parking.jpg", "image/jpeg", ReportFixtures.jpegBytes());
+        click(page, "Save receipt");
 
         // Issue #89: the buffered receipt previews as a thumbnail on the row right
         // away — before the report is even saved — not just as a filename chip.
-        assertThat(findButton().withAriaLabel("Preview receipt: parking.jpg").exists())
+        assertThat(hasNamed(page, "Preview receipt: parking.jpg"))
                 .isTrue();
-        assertThat($(Image.class).exists()).isTrue();
+        // Since #172 a row shows a paperclip chip, not a thumbnail; activating it must
+        // enlarge the receipt image itself.
+        assertPreviewEnlarges(page, "parking.jpg");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var parking = service.findMine(id).travels().getFirst()
                 .generatedLine(com.vaadin.expensemanager.report.domain.GeneratedLineKind
@@ -992,34 +1038,34 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void editingATripWithFreeLunchRegeneratesAHalvedPerDiem() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+    void editingATripWithFreeLunchRegeneratesAHalvedPerDiem(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
+        page.navigate(ReportDetailView.class, id);
 
-        clickRowAction(TRIP, "Edit");                    // the trip row's menu
-        dailyAllowance().selectItem("Halved, free lunch provided");
-        saveTrip();
+        clickRowAction(page, TRIP, "Edit");                    // the trip row's menu
+        dailyAllowance(page).selectItem("Halved, free lunch provided");
+        saveDialog(page);
 
         // Live per-diem halves to €27.00; a save regenerates the line.
-        assertThat(getCurrentView().getElement().getTextRecursively()).contains("€27.00");
-        findButton().withText("Save").click();
+        assertThat(viewText(page)).contains("€27.00");
+        click(page, "Save");
 
         assertThat(service.findMine(id).perDiemTotal()).isEqualByComparingTo("27.00");
     }
 
     @Test
-    void aTripEarningAPartialDayListsTwoPerDiemCardsUnderOneSubtotal() {
+    void aTripEarningAPartialDayListsTwoPerDiemCardsUnderOneSubtotal(UnifiedPage page) {
         // Issue #124: 31 h → a full-day card (1 × €54.00) and a partial-day card
         // (1 × €25.00), each labelled by the day it prices, both folded into the single
         // "Per diem allowance" subtotal row (€79.00).
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(31));
-        navigate(ReportDetailView.class, id);
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(31));
+        page.navigate(ReportDetailView.class, id);
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("Per diem allowance (full day)", "€54.00",
                 "Per diem allowance (partial day)", "€25.00");
         // One subtotal row for both lines, and it is the sum.
-        assertThat(findSpan().withText("Per diem allowance").exists()).isTrue();
+        assertThat(hasSpan(page, "Per diem allowance")).isTrue();
         assertThat(shown).contains("€79.00");
 
         var loaded = service.findMine(id);
@@ -1029,36 +1075,36 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aMultiDayPerDiemCardShowsTheDaysTimesRateBreakdown() {
+    void aMultiDayPerDiemCardShowsTheDaysTimesRateBreakdown(UnifiedPage page) {
         // 55 h → 2 full days + 1 partial: the full-day card reads like an invoice line
         // (ADR-0023), the partial-day card stays a plain quantity-1 card.
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("2 × €54.00 = €108.00")
                 .doesNotContain("1 × €25.00");
         assertThat(service.findMine(id).perDiemTotal()).isEqualByComparingTo("133.00");
     }
 
     @Test
-    void reCostingATripDropsThePerDiemCardItNoLongerEarns() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(31));
-        navigate(ReportDetailView.class, id);
-        assertThat(getCurrentView().getElement().getTextRecursively())
+    void reCostingATripDropsThePerDiemCardItNoLongerEarns(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(31));
+        page.navigate(ReportDetailView.class, id);
+        assertThat(viewText(page))
                 .contains("Per diem allowance (partial day)");
 
         // Shorten the trip to a whole 24 h through its editor: the partial-day card
         // disappears, the full-day one stays, and the subtotal follows live.
-        clickRowAction(TRIP, "Edit");
-        findDateTimePicker().withLabel("Return").setValue(DEP.plusHours(24));
-        saveTrip();
+        clickRowAction(page, TRIP, "Edit");
+        dateTimePicker(page, "Return").setValue(DEP.plusHours(24));
+        saveDialog(page);
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("Per diem allowance (full day)")
                 .doesNotContain("Per diem allowance (partial day)");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var loaded = service.findMine(id);
         assertThat(loaded.perDiemTotal()).isEqualByComparingTo("54.00");
@@ -1071,25 +1117,25 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // with a mandatory reason; the unit price stays statutory and server-computed.
 
     @Test
-    void overridingTheFullDayCountRescalesTheLineTheSubtotalAndTheTotal() {
+    void overridingTheFullDayCountRescalesTheLineTheSubtotalAndTheTotal(UnifiedPage page) {
         // 55 h → 2 full days (€108.00) + 1 partial day (€25.00) = €133.00.
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
+        assertThat(viewText(page))
                 .contains("€133.00");
 
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
 
         // The row now reads the effective figures, badges the correction, gives the
         // reason and names what the calculator produced — before any save.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("Overridden",
                 "Reason: the Wednesday was personal",
                 "Calculated: 2 × €54.00 = €108.00");
         // 1 full day + the untouched partial day, live in the subtotal and total.
         assertThat(shown).contains("€79.00");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var loaded = service.findMine(id);
         assertThat(loaded.perDiemTotal()).isEqualByComparingTo("79.00");
@@ -1102,31 +1148,31 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void anOverrideSurvivesSavingAndReloadingWithItsReason() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
-        findButton().withText("Save").click();
+    void anOverrideSurvivesSavingAndReloadingWithItsReason(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
+        click(page, "Save");
 
         // Reload the persisted report from scratch: the badge, the reason and the
         // statutory baseline are all still there.
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("Overridden",
                 "Reason: the Wednesday was personal",
                 "Calculated: 2 × €54.00 = €108.00", "€79.00");
     }
 
     @Test
-    void theMealAllowanceCountIsOverridableToo() {
+    void theMealAllowanceCountIsOverridableToo(UnifiedPage page) {
         // A not-eligible trip paying a meal allowance: one flat €13.50 line.
-        var id = seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
+        var id = fixtures.seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        overrideCount("Meal allowance", 2, "two meals were taken");
-        findButton().withText("Save").click();
+        overrideCount(page, "Meal allowance", 2, "two meals were taken");
+        click(page, "Save");
 
         var loaded = service.findMine(id);
         assertThat(loaded.mealTotal()).isEqualByComparingTo("27.00");
@@ -1136,80 +1182,79 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aBlankReasonIsRejectedInTheDialogsErrorSummaryAndChangesNothing() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+    void aBlankReasonIsRejectedInTheDialogsErrorSummaryAndChangesNothing(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
 
-        clickRowAction("Per diem allowance (full day)", "Override");
-        findIntegerField().withLabel("Count").setValue(1);
-        findTextArea().withLabel("Reason for the override").setValue("   ");
+        clickRowAction(page, "Per diem allowance (full day)", "Override");
+        integerField(page, "Count").setValue(1);
+        textArea(page, "Reason for the override").setValue("   ");
         // Always-enabled submit (ADR-0020): the click is allowed, the reason shows.
-        findButton().withText("Save override").click();
+        click(page, "Save override");
 
-        assertThat(UI.getCurrent().getElement().getTextRecursively())
+        assertThat(dialogText(page))
                 .contains("A reason for the override is required.");
         // The dialog stays open and nothing was corrected.
-        assertThat(findButton().withText("Save override").exists()).isTrue();
-        assertThat(findSpan().withText("Overridden").exists()).isFalse();
+        assertThat(hasButton(page, "Save override")).isTrue();
+        assertThat(hasSpan(page, "Overridden")).isFalse();
     }
 
     @Test
-    void thePartialDayCountIsCappedAtOneWithTheReasonInTheErrorSummary() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+    void thePartialDayCountIsCappedAtOneWithTheReasonInTheErrorSummary(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
 
-        clickRowAction("Per diem allowance (partial day)", "Override");
-        findIntegerField().withLabel("Count").setValue(2);
-        findTextArea().withLabel("Reason for the override").setValue("two leftovers");
-        findButton().withText("Save override").click();
+        clickRowAction(page, "Per diem allowance (partial day)", "Override");
+        integerField(page, "Count").setValue(2);
+        textArea(page, "Reason for the override").setValue("two leftovers");
+        click(page, "Save override");
 
-        assertThat(UI.getCurrent().getElement().getTextRecursively())
+        assertThat(dialogText(page))
                 .contains("one partial day");
-        assertThat(findButton().withText("Save override").exists()).isTrue();
+        assertThat(hasButton(page, "Save override")).isTrue();
         assertThat(service.findMine(id).perDiemTotal()).isEqualByComparingTo("133.00");
     }
 
     @Test
-    void theCountFieldTakesWholeNumbersAtOrAboveTheFloor() {
+    void theCountFieldTakesWholeNumbersAtOrAboveTheFloor(UnifiedPage page) {
         // Integrality is enforced at the widget (an IntegerField) and the floor with
         // it; the domain enforces both again on save. The tester refuses to set an
         // out-of-range value, so assert the constraint that makes that so (F-021).
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
 
-        clickRowAction("Per diem allowance (full day)", "Override");
+        clickRowAction(page, "Per diem allowance (full day)", "Override");
 
-        var count = (IntegerField) findIntegerField().withLabel("Count").getComponent();
-        assertThat(count.getMin()).isEqualTo(0);
+        assertThat(integerField(page, "Count").getMin()).isEqualTo(0);
     }
 
     @Test
-    void kilometreAndParkingLinesOfferNoOverride() {
+    void kilometreAndParkingLinesOfferNoOverride(UnifiedPage page) {
         // Their numbers are trip inputs with a single home — edited on the trip.
-        var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
+        var id = fixtures.seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("120"), false,
                 new BigDecimal("12.00"));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(rowActions("Per diem allowance (full day)")).contains("Override");
-        assertThat(rowActions("Kilometre allowance")).doesNotContain("Override");
-        assertThat(rowActions("Parking")).doesNotContain("Override");
+        assertThat(rowActions(page, "Per diem allowance (full day)")).contains("Override");
+        assertThat(rowActions(page, "Kilometre allowance")).doesNotContain("Override");
+        assertThat(rowActions(page, "Parking")).doesNotContain("Override");
     }
 
     @Test
-    void resetToCalculatedRemovesTheOverrideWithoutTouchingTheTrip() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
-        findButton().withText("Save").click();
+    void resetToCalculatedRemovesTheOverrideWithoutTouchingTheTrip(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
+        click(page, "Save");
 
-        clickRowAction("Per diem allowance (full day)", "Reset to calculated");
+        clickRowAction(page, "Per diem allowance (full day)", "Reset to calculated");
 
         // Back to the statutory figure, live, and the badge is gone.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("€133.00").doesNotContain("Overridden");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var loaded = service.findMine(id);
         assertThat(loaded.perDiemTotal()).isEqualByComparingTo("133.00");
@@ -1219,28 +1264,28 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aSubmittedReportShowsAnOverrideReadOnlyWithNoWayToChangeIt() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
-        findButton().withText("Save").click();
+    void aSubmittedReportShowsAnOverrideReadOnlyWithNoWayToChangeIt(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
+        click(page, "Save");
         service.submit(id, service.findMine(id).version());
 
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Editability falls out of the existing DRAFT/REJECTED gating — the badge,
         // reason and baseline still read, but every mutation surface is gone.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("Overridden", "Reason: the Wednesday was personal",
                 "Calculated: 2 × €54.00 = €108.00");
         // A read-only report builds no menu at all, rather than a disabled trigger.
-        assertThat(rowActions("Per diem allowance (full day)")).isEmpty();
+        assertThat(rowActions(page, "Per diem allowance (full day)")).isEmpty();
     }
 
     @Test
-    void aRejectedReportCanStillBeCorrectedWithAnOverride() {
+    void aRejectedReportCanStillBeCorrectedWithAnOverride(UnifiedPage page) {
         // The owner acts on an approver's feedback: REJECTED is editable again.
-        var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100",
+        var id = fixtures.seedRejectedReport(LocalDate.of(2026, 7, 1), "100",
                 "The Wednesday looks personal.");
         var loaded = service.findMine(id);
         service.update(id, new ReportDetailDto(id, loaded.reportDate(),
@@ -1252,10 +1297,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
                 loaded.total(), loaded.netTotal(), loaded.vatTotal(),
                 loaded.perDiemTotal(), loaded.kilometreTotal(), loaded.mealTotal()),
                 loaded.version());
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
-        findButton().withText("Save").click();
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
+        click(page, "Save");
 
         assertThat(service.findMine(id).perDiemTotal()).isEqualByComparingTo("79.00");
     }
@@ -1264,11 +1309,11 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * Drives the whole override flow for one generated line: opens the row's
      * override dialog, enters a count and a reason, and confirms.
      */
-    private void overrideCount(String lineLabel, int count, String reason) {
-        clickRowAction(lineLabel, "Override");
-        findIntegerField().withLabel("Count").setValue(count);
-        findTextArea().withLabel("Reason for the override").setValue(reason);
-        findButton().withText("Save override").click();
+    private void overrideCount(UnifiedPage page, String lineLabel, int count, String reason) {
+        clickRowAction(page, lineLabel, "Override");
+        integerField(page, "Count").setValue(count);
+        textArea(page, "Reason for the override").setValue(reason);
+        click(page, "Save override");
     }
 
     // --- Zero suppresses the line, with the receipt-destruction confirm (issue #132) ---
@@ -1278,16 +1323,16 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // cascade, ADR-0024), the user is warned first and the file is named.
 
     @Test
-    void aZeroCountRemovesTheLineWithoutPromptingWhenItCarriesNoReceipt() {
+    void aZeroCountRemovesTheLineWithoutPromptingWhenItCarriesNoReceipt(UnifiedPage page) {
         // 55 h → 2 full days (€108.00) + 1 partial day (€25.00) = €133.00.
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
 
-        overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
+        overrideCount(page, "Per diem allowance (partial day)", 0, "the leftover was personal");
 
         // Nothing to destroy, so nothing to confirm — the correction applied at once.
-        assertThat(findButton().withText("Remove line and receipt").exists()).isFalse();
-        var shown = getCurrentView().getElement().getTextRecursively();
+        assertThat(hasButton(page, "Remove line and receipt")).isFalse();
+        var shown = viewText(page);
         // The line is gone from the report; the full days are untouched and the
         // per-diem subtotal and total drop to just them.
         assertThat(shown).contains("€108.00").doesNotContain("€133.00", "1 × €25.00");
@@ -1295,10 +1340,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         // back — without which a zero override would be unreachable once made.
         assertThat(shown).contains("Removed",
                 "Removed from the report. Reason: the leftover was personal");
-        assertThat(rowActions("Per diem allowance (partial day)"))
+        assertThat(rowActions(page, "Per diem allowance (partial day)"))
                 .containsExactly("Reset to calculated");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var loaded = service.findMine(id);
         assertThat(loaded.travels().getFirst()
@@ -1308,21 +1353,21 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void suppressingALineCarryingAReceiptConfirmsFirstAndNamesTheFile() {
-        var id = seedMealTravelWithSavedReceipt("lunch.jpg");
-        navigate(ReportDetailView.class, id);
+    void suppressingALineCarryingAReceiptConfirmsFirstAndNamesTheFile(UnifiedPage page) {
+        var id = seedMealTravelWithSavedReceipt(page, "lunch.jpg");
+        page.navigate(ReportDetailView.class, id);
 
-        overrideCount("Meal allowance", 0, "no meal was taken after all");
+        overrideCount(page, "Meal allowance", 0, "no meal was taken after all");
 
         // Nothing has happened yet: the dialog names the line, names the file, and says
         // the receipt goes with it.
-        var prompt = UI.getCurrent().getElement().getTextRecursively();
+        var prompt = dialogText(page);
         assertThat(prompt).contains("removes the Meal allowance line", "lunch.jpg",
                 "deleted with the line and cannot be recovered");
         assertThat(service.findMine(id).mealTotal()).isEqualByComparingTo("13.50");
 
-        findButton().withText("Remove line and receipt").click();
-        findButton().withText("Save").click();
+        click(page, "Remove line and receipt");
+        click(page, "Save");
 
         var loaded = service.findMine(id);
         assertThat(loaded.travels().getFirst().generatedLine(GeneratedLineKind.MEAL))
@@ -1332,18 +1377,18 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void cancellingTheReceiptWarningLeavesBothTheLineAndItsReceiptAlone() {
-        var id = seedMealTravelWithSavedReceipt("lunch.jpg");
-        navigate(ReportDetailView.class, id);
+    void cancellingTheReceiptWarningLeavesBothTheLineAndItsReceiptAlone(UnifiedPage page) {
+        var id = seedMealTravelWithSavedReceipt(page, "lunch.jpg");
+        page.navigate(ReportDetailView.class, id);
 
-        overrideCount("Meal allowance", 0, "no meal was taken after all");
-        findButton().withText("Cancel").click();
+        overrideCount(page, "Meal allowance", 0, "no meal was taken after all");
+        click(page, "Cancel");
 
         // The line still stands at its statutory figure, with its receipt attached and
         // no override recorded — cancelling is a full retreat, not a half-applied one.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("Meal allowance", "€13.50").doesNotContain("Removed");
-        assertThat(rowActions("Meal allowance")).contains("Edit receipt");
+        assertThat(rowActions(page, "Meal allowance")).contains("Edit receipt");
 
         var stillThere = service.findMine(id).travels().getFirst()
                 .generatedLine(GeneratedLineKind.MEAL).orElseThrow();
@@ -1355,52 +1400,52 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void suppressingALineDropsItsBufferedReceiptSoNoStaleReferenceIsSaved() {
+    void suppressingALineDropsItsBufferedReceiptSoNoStaleReferenceIsSaved(UnifiedPage page) {
         // The receipt is attached but the report not yet saved (ADR-0021 buffering), so
         // the doomed file lives only in the view's pending map. Suppressing the line
         // must prune it: on save the service would otherwise be handed a
         // GeneratedLineRef for a kind the trip no longer generates.
-        var id = seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
+        var id = fixtures.seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
-        clickRowAction("Meal allowance", "Add receipt");
-        findUpload().upload("lunch.jpg", "image/jpeg", jpegBytes());
-        findButton().withText("Save receipt").click();
+        page.navigate(ReportDetailView.class, id);
+        clickRowAction(page, "Meal allowance", "Add receipt");
+        upload(page).upload("lunch.jpg", "image/jpeg", ReportFixtures.jpegBytes());
+        click(page, "Save receipt");
 
-        overrideCount("Meal allowance", 0, "no meal was taken");
+        overrideCount(page, "Meal allowance", 0, "no meal was taken");
         // A buffered receipt is just as destructible as a saved one — same warning.
-        assertThat(UI.getCurrent().getElement().getTextRecursively())
+        assertThat(dialogText(page))
                 .contains("lunch.jpg");
-        findButton().withText("Remove line and receipt").click();
+        click(page, "Remove line and receipt");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         // The save went through (a stale ref would have failed it) and left nothing
         // behind: no line, no receipt, no error.
-        assertThat(findSpan().withText("Something went wrong").exists()).isFalse();
+        assertThat(hasSpan(page, "Something went wrong")).isFalse();
         var loaded = service.findMine(id);
         assertThat(loaded.travels().getFirst().generatedLines()).isEmpty();
         assertThat(loaded.total()).isEqualByComparingTo("0.00");
     }
 
     @Test
-    void resetToCalculatedRestoresASuppressedLineAtItsStatutoryCount() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
-        findButton().withText("Save").click();
+    void resetToCalculatedRestoresASuppressedLineAtItsStatutoryCount(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
+        overrideCount(page, "Per diem allowance (partial day)", 0, "the leftover was personal");
+        click(page, "Save");
         // Reload, so the reset acts on a persisted suppression rather than a live one.
-        navigate(ReportDetailView.class, id);
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        page.navigate(ReportDetailView.class, id);
+        assertThat(viewText(page))
                 .contains("Removed from the report. Reason: the leftover was personal");
 
-        clickRowAction("Per diem allowance (partial day)", "Reset to calculated");
+        clickRowAction(page, "Per diem allowance (partial day)", "Reset to calculated");
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("Per diem allowance (partial day)", "€25.00",
                 "€133.00").doesNotContain("Removed");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var loaded = service.findMine(id);
         assertThat(loaded.travels().getFirst().quantityOverrides()).isEmpty();
@@ -1411,42 +1456,41 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aSuppressedLineIsShownReadOnlyOnASubmittedReport() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
-        findButton().withText("Save").click();
+    void aSuppressedLineIsShownReadOnlyOnASubmittedReport(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
+        overrideCount(page, "Per diem allowance (partial day)", 0, "the leftover was personal");
+        click(page, "Save");
         service.submit(id, service.findMine(id).version());
 
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The record of what was dropped and why still reads — an approver's question
         // about a missing partial day has an answer on the report — but the way back is
         // gone with every other mutation surface (the existing DRAFT/REJECTED gating).
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("Removed from the report. Reason: the leftover was personal");
-        assertThat(rowActions("Per diem allowance (partial day)")).isEmpty();
+        assertThat(rowActions(page, "Per diem allowance (partial day)")).isEmpty();
     }
 
     /**
      * A DRAFT report with one meal-allowance trip whose line carries a <em>saved</em>
      * receipt — the state the receipt-destruction warning is about.
      *
-     * <p>The session is cleared afterwards so the suppression runs against a fresh
-     * load, as a real request would: a request that loads a report never loads its
-     * receipts (nothing references them — {@code ExpenseLine} has no back-reference,
-     * which is why the cascade lives in the schema), whereas this
-     * {@code @Transactional} test would still be holding the one it just created.
+     * <p>Every click is its own request with its own persistence session, so the
+     * suppression runs against a fresh load, as in production: a request that loads a
+     * report never loads its receipts (nothing references them — {@code ExpenseLine}
+     * has no back-reference, which is why the cascade lives in the schema). With no
+     * test transaction there is no longer a long-lived session to clear.
      */
-    private Long seedMealTravelWithSavedReceipt(String filename) {
-        var id = seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
+    private Long seedMealTravelWithSavedReceipt(UnifiedPage page, String filename) {
+        var id = fixtures.seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
-        clickRowAction("Meal allowance", "Add receipt");
-        findUpload().upload(filename, "image/jpeg", jpegBytes());
-        findButton().withText("Save receipt").click();
-        findButton().withText("Save").click();
-        entityManager.clear();
+        page.navigate(ReportDetailView.class, id);
+        clickRowAction(page, "Meal allowance", "Add receipt");
+        upload(page).upload(filename, "image/jpeg", ReportFixtures.jpegBytes());
+        click(page, "Save receipt");
+        click(page, "Save");
         return id;
     }
 
@@ -1460,27 +1504,27 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // clicked through, which is the silent data loss it exists to prevent.
 
     @Test
-    void aTripEditThatMovesTheCalculatedCountConfirmsAndClearsTheOverride() {
+    void aTripEditThatMovesTheCalculatedCountConfirmsAndClearsTheOverride(UnifiedPage page) {
         // 55 h → 2 full days + 1 partial; the full days are overridden down to 1.
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
         // Lengthen the trip to 79 h → 3 full days: the number the override corrected
         // has moved, so the correction cannot stand.
-        editTripReturn(DEP.plusHours(79));
+        editTripReturn(page, DEP.plusHours(79));
 
-        assertThat(clearingConfirm().getHeaderTitle()).isEqualTo("Clear your override?");
-        assertThat(dialogText(clearingConfirm())).contains(
+        assertThat(clearingConfirm(page).getHeaderTitle()).isEqualTo("Clear your override?");
+        assertThat(dialogText(clearingConfirm(page))).contains(
                 "Per diem allowance (full day): calculated 2 → 3 days.",
                 "Your override (1 day — \"the Wednesday was personal\") "
                         + "will be cleared.");
-        findButton().withText("Clear and save trip").click();
+        click(page, "Clear and save trip");
 
         // The line is back to the statutory count, live: 3 × €54.00 + the partial day.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        var shown = viewText(page);
         assertThat(shown).contains("3 × €54.00 = €162.00", "€187.00")
                 .doesNotContain("Overridden", "the Wednesday was personal");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var trip = service.findMine(id).travels().getFirst();
         assertThat(trip.quantityOverrides()).isEmpty();
@@ -1489,22 +1533,22 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void cancellingTheClearingConfirmAbandonsTheTripSaveAndKeepsTheOverride() {
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+    void cancellingTheClearingConfirmAbandonsTheTripSaveAndKeepsTheOverride(UnifiedPage page) {
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
-        editTripReturn(DEP.plusHours(79));
-        findButton().withText("Keep editing").click();
+        editTripReturn(page, DEP.plusHours(79));
+        click(page, "Keep editing");
 
         // A full retreat: the trip editor is still open on the user's edit, and behind
         // it the trip and its override are untouched (1 × €54.00 + €25.00 = €79.00).
-        assertThat(findButton().withText("Save").inside(findDialog()).exists()).isTrue();
-        var shown = getCurrentView().getElement().getTextRecursively();
+        assertThat(hasButton(dialog(page), "Save")).isTrue();
+        var shown = viewText(page);
         assertThat(shown).contains("Overridden",
                 "Reason: the Wednesday was personal", "€79.00");
 
         // Abandon the trip edit, then save the report: nothing of the edit survived.
-        findButton().withText("Cancel").click();
-        findButton().withText("Save").click();
+        click(page, "Cancel");
+        click(page, "Save");
 
         var trip = service.findMine(id).travels().getFirst();
         assertThat(trip.returnAt()).isEqualTo(DEP.plusHours(55));
@@ -1513,20 +1557,20 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void editingOnlyThePurposeOrDestinationsNeverPromptsAndNeverClears() {
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+    void editingOnlyThePurposeOrDestinationsNeverPromptsAndNeverClears(UnifiedPage page) {
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
-        clickRowAction(TRIP, "Edit");
-        findTextField().withLabel("Travel purpose").setValue("Client visit (Acme)");
-        findTextField().withLabel("Destinations").setValue("Helsinki, Espoo");
-        saveTrip();
+        clickRowAction(page, TRIP, "Edit");
+        textField(page, "Travel purpose").setValue("Client visit (Acme)");
+        textField(page, "Destinations").setValue("Helsinki, Espoo");
+        saveDialog(page);
 
         // Nothing the calculation can see changed, so nothing is asked and nothing lost.
-        assertThat(findButton().withText("Clear and save trip").exists()).isFalse();
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(hasButton(page, "Clear and save trip")).isFalse();
+        assertThat(viewText(page))
                 .contains("Overridden", "Reason: the Wednesday was personal", "€79.00");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var trip = service.findMine(id).travels().getFirst();
         assertThat(trip.purpose()).isEqualTo("Client visit (Acme)");
@@ -1536,18 +1580,18 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aTimeChangeTheDayCountAbsorbsNeverPromptsAndNeverClears() {
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+    void aTimeChangeTheDayCountAbsorbsNeverPromptsAndNeverClears(UnifiedPage page) {
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
         // 55 h → 55 h 15 min: still 2 full days and one leftover over the 6 h partial
         // threshold. The inputs moved; the counts the override corrects did not.
-        editTripReturn(DEP.plusHours(55).plusMinutes(15));
+        editTripReturn(page, DEP.plusHours(55).plusMinutes(15));
 
-        assertThat(findButton().withText("Clear and save trip").exists()).isFalse();
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(hasButton(page, "Clear and save trip")).isFalse();
+        assertThat(viewText(page))
                 .contains("Overridden", "Reason: the Wednesday was personal", "€79.00");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var trip = service.findMine(id).travels().getFirst();
         assertThat(trip.returnAt()).isEqualTo(DEP.plusHours(55).plusMinutes(15));
@@ -1557,21 +1601,21 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void clearingIsPerKindSoAnUnaffectedOverrideStands() {
-        var id = seedOverriddenTravel(DEP.plusHours(55));
-        overrideCount("Per diem allowance (partial day)", 1, "the leftover was worked");
-        findButton().withText("Save").click();
+    void clearingIsPerKindSoAnUnaffectedOverrideStands(UnifiedPage page) {
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
+        overrideCount(page, "Per diem allowance (partial day)", 1, "the leftover was worked");
+        click(page, "Save");
 
         // 55 h → 31 h: the full days drop 2 → 1, but the trip still earns exactly one
         // partial day, so only the full-day override is invalidated.
-        editTripReturn(DEP.plusHours(31));
+        editTripReturn(page, DEP.plusHours(31));
 
-        assertThat(clearingConfirm().getHeaderTitle()).isEqualTo("Clear your override?");
-        assertThat(dialogText(clearingConfirm()))
+        assertThat(clearingConfirm(page).getHeaderTitle()).isEqualTo("Clear your override?");
+        assertThat(dialogText(clearingConfirm(page)))
                 .contains("Per diem allowance (full day): calculated 2 → 1 day.")
                 .doesNotContain("Per diem allowance (partial day)");
-        findButton().withText("Clear and save trip").click();
-        findButton().withText("Save").click();
+        click(page, "Clear and save trip");
+        click(page, "Save");
 
         var trip = service.findMine(id).travels().getFirst();
         assertThat(trip.quantityOverrides())
@@ -1581,47 +1625,47 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aMealCountChangeLeavesAPerDiemOverrideInPlace() {
+    void aMealCountChangeLeavesAPerDiemOverrideInPlace(UnifiedPage page) {
         // The other direction of per-kind clearing: a trip paying a meal allowance
         // (so earning no per-diem, issue #93) with an override on each kind — the
         // per-diem one dormant, since an override never conjures a line.
-        var id = seedMealTravelOverriddenOnBothKinds();
-        navigate(ReportDetailView.class, id);
+        var id = seedMealTravelOverriddenOnBothKinds(page);
+        page.navigate(ReportDetailView.class, id);
 
         // Stop paying the meal allowance: its count drops 1 → 0. The trip stays not
         // eligible, so the per-diem count is 0 either side and its override stands.
-        clickRowAction(TRIP, "Edit");
-        findCheckbox().withLabel("Pay meal allowance?").click();
-        saveTrip();
+        clickRowAction(page, TRIP, "Edit");
+        checkbox(page, "Pay meal allowance?").uncheck();
+        saveDialog(page);
 
-        assertThat(dialogText(clearingConfirm()))
+        assertThat(dialogText(clearingConfirm(page)))
                 .contains("Meal allowance: calculated 1 → 0 meals.")
                 .doesNotContain("Per diem allowance");
-        findButton().withText("Clear and save trip").click();
-        findButton().withText("Save").click();
+        click(page, "Clear and save trip");
+        click(page, "Save");
 
         assertThat(service.findMine(id).travels().getFirst().quantityOverrides())
                 .containsOnlyKeys(GeneratedLineKind.PER_DIEM_FULL);
     }
 
     @Test
-    void aTripEditThatMovesTwoOverriddenCountsReportsBothInOneConfirm() {
-        var id = seedOverriddenTravel(DEP.plusHours(55));
-        overrideCount("Per diem allowance (partial day)", 1, "the leftover was worked");
-        findButton().withText("Save").click();
+    void aTripEditThatMovesTwoOverriddenCountsReportsBothInOneConfirm(UnifiedPage page) {
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
+        overrideCount(page, "Per diem allowance (partial day)", 1, "the leftover was worked");
+        click(page, "Save");
 
         // 55 h → 72 h: three whole days and no leftover at all, so both corrected
         // counts move (full 2 → 3, partial 1 → 0) — one dialog, both named.
-        editTripReturn(DEP.plusHours(72));
+        editTripReturn(page, DEP.plusHours(72));
 
         // One dialog, both corrections named — not two prompts in a row.
-        assertThat(clearingConfirm().getHeaderTitle()).isEqualTo("Clear your overrides?");
-        assertThat(dialogText(clearingConfirm())).contains(
+        assertThat(clearingConfirm(page).getHeaderTitle()).isEqualTo("Clear your overrides?");
+        assertThat(dialogText(clearingConfirm(page))).contains(
                 "Per diem allowance (full day): calculated 2 → 3 days.",
                 "Per diem allowance (partial day): calculated 1 → 0 days.",
                 "\"the Wednesday was personal\"", "\"the leftover was worked\"");
-        findButton().withText("Clear and save trip").click();
-        findButton().withText("Save").click();
+        click(page, "Clear and save trip");
+        click(page, "Save");
 
         var trip = service.findMine(id).travels().getFirst();
         assertThat(trip.quantityOverrides()).isEmpty();
@@ -1629,23 +1673,23 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void editingAnOverrideNeverChangesTheCalculationAndNeverPrompts() {
+    void editingAnOverrideNeverChangesTheCalculationAndNeverPrompts(UnifiedPage page) {
         // The two surfaces are independent: an override is a correction to the
         // calculation's output, so it can never move the calculation's input.
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
-        clickRowAction("Per diem allowance (full day)", "Edit override");
-        findIntegerField().withLabel("Count").setValue(2);
-        findTextArea().withLabel("Reason for the override")
+        clickRowAction(page, "Per diem allowance (full day)", "Edit override");
+        integerField(page, "Count").setValue(2);
+        textArea(page, "Reason for the override")
                 .setValue("both days were personal after all");
-        findButton().withText("Save override").click();
+        click(page, "Save override");
 
-        assertThat(findButton().withText("Clear and save trip").exists()).isFalse();
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(hasButton(page, "Clear and save trip")).isFalse();
+        assertThat(viewText(page))
                 .contains("Calculated: 2 × €54.00 = €108.00",
                         "Reason: both days were personal after all");
 
-        findButton().withText("Save").click();
+        click(page, "Save");
 
         var trip = service.findMine(id).travels().getFirst();
         assertThat(trip.returnAt()).isEqualTo(DEP.plusHours(55));
@@ -1655,34 +1699,34 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void theTripPreviewShowsCalculatedFiguresAnnotatedWhereAnOverrideIsInForce() {
+    void theTripPreviewShowsCalculatedFiguresAnnotatedWhereAnOverrideIsInForce(UnifiedPage page) {
         // What makes the "2 → 3" warning legible: the dialog previews the trip inputs,
         // never the corrected figures — and says so where a correction is in force, so
         // the preview and the report showing different numbers is never a mystery.
-        seedOverriddenTravel(DEP.plusHours(55));
+        seedOverriddenTravel(page, DEP.plusHours(55));
 
-        clickRowAction(TRIP, "Edit");
+        clickRowAction(page, TRIP, "Edit");
 
-        assertThat(tripPreviewText()).contains(
+        assertThat(tripPreviewText(page)).contains(
                 "Per diem allowance (full day)", "€108.00",
                 "Overridden: 1 day on the report (the Wednesday was personal)");
         // The report row behind still shows the effective figure — the two disagree by
         // design, which is exactly why the preview line is annotated.
-        assertThat(getCurrentView().getElement().getTextRecursively()).contains("€79.00");
+        assertThat(viewText(page)).contains("€79.00");
     }
 
     @Test
-    void aSuppressedKindIsAnnotatedInThePreviewThatNoLongerListsIt() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
-        findButton().withText("Save").click();
+    void aSuppressedKindIsAnnotatedInThePreviewThatNoLongerListsIt(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
+        page.navigate(ReportDetailView.class, id);
+        overrideCount(page, "Per diem allowance (partial day)", 0, "the leftover was personal");
+        click(page, "Save");
 
-        clickRowAction(TRIP, "Edit");
+        clickRowAction(page, TRIP, "Edit");
 
         // The calculated preview still lists the partial day (the rules award it), and
         // the note says the report does not.
-        assertThat(tripPreviewText()).contains(
+        assertThat(tripPreviewText(page)).contains(
                 "Per diem allowance (partial day)", "€25.00",
                 "Overridden: no line on the report (the leftover was personal)");
     }
@@ -1693,11 +1737,11 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * starts from: a persisted override standing on a persisted trip. Returns the
      * report id, with the view left open on it.
      */
-    private Long seedOverriddenTravel(LocalDateTime returnAt) {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, returnAt);
-        navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
-        findButton().withText("Save").click();
+    private Long seedOverriddenTravel(UnifiedPage page, LocalDateTime returnAt) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, returnAt);
+        page.navigate(ReportDetailView.class, id);
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
+        click(page, "Save");
         return id;
     }
 
@@ -1706,55 +1750,37 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * only it uses — the trip editor is still open behind it, so "the dialog" is
      * ambiguous.
      */
-    private Dialog clearingConfirm() {
-        return openDialogSaying("recalculates its allowances");
+    private UnifiedDialog clearingConfirm(UnifiedPage page) {
+        return openDialogSaying(page, "recalculates its allowances");
     }
 
     /** The trip editor's live allowance preview, as text. */
-    private String tripPreviewText() {
-        return dialogText(openDialogSaying("Trip total"));
+    private String tripPreviewText(UnifiedPage page) {
+        return dialogText(openDialogSaying(page, "Trip total"));
     }
 
     /**
      * The open dialog whose content includes {@code marker}.
      *
-     * <p>Read a dialog's words from the dialog, never from
-     * {@code UI.getCurrent().getElement().getTextRecursively()} (F-057): the UI's own
-     * text never carries the view's text and does not carry a <em>just-opened</em>
-     * dialog's either, so asserting there silently reads as "the dialog says nothing".
+     * <p>Innermost match: since Vaadin 25.3 a dialog opened while a modal dialog is
+     * open attaches <em>inside</em> it (F-082), on the server and so in the DOM, so the
+     * outer editor's text also contains the confirm's marker. The innermost match is
+     * the one with the least text — its text is part of every dialog enclosing it —
+     * which avoids walking a tree each tool exposes differently.
      */
-    private Dialog openDialogSaying(String marker) {
-        // Innermost match: since Vaadin 25.3 a dialog opened while a modal dialog is
-        // open attaches *inside* it (F-082), so the outer editor's recursive text also
-        // contains the confirm's marker. Skip any match that encloses another.
-        var matches = findDialog().components().stream().filter(Dialog::isOpened)
-                .filter(dialog -> dialogText(dialog).contains(marker)).toList();
-        return matches.stream()
-                .filter(outer -> matches.stream().noneMatch(inner -> inner != outer
-                        && isAncestor(outer, inner)))
-                .findFirst()
+    private static UnifiedDialog openDialogSaying(UnifiedPage page, String marker) {
+        return openDialogs(page).stream()
+                .filter(dialog -> dialogText(dialog).contains(marker))
+                .min(Comparator.comparingInt(dialog -> dialogText(dialog).length()))
                 .orElseThrow(() -> new AssertionError(
                         "No open dialog says \"" + marker + "\""));
     }
 
-    private static boolean isAncestor(Dialog outer, Dialog inner) {
-        for (var e = inner.getElement().getParent(); e != null; e = e.getParent()) {
-            if (e.equals(outer.getElement())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static String dialogText(Dialog dialog) {
-        return dialog.getElement().getTextRecursively();
-    }
-
     /** Re-costs the open report's only trip by moving its return time. */
-    private void editTripReturn(LocalDateTime returnAt) {
-        clickRowAction(TRIP, "Edit");
-        findDateTimePicker().withLabel("Return").setValue(returnAt);
-        saveTrip();
+    private void editTripReturn(UnifiedPage page, LocalDateTime returnAt) {
+        clickRowAction(page, TRIP, "Edit");
+        dateTimePicker(page, "Return").setValue(returnAt);
+        saveDialog(page);
     }
 
     /**
@@ -1764,7 +1790,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * is precisely what makes it the control in a per-kind clearing test. Seeded
      * through the service because a dormant override has no row to be made on.
      */
-    private Long seedMealTravelOverriddenOnBothKinds() {
+    private Long seedMealTravelOverriddenOnBothKinds(UnifiedPage page) {
         var zero = BigDecimal.ZERO.setScale(2);
         var trip = TravelDto.domestic(null, DEP, DEP.plusHours(11), "Helsinki",
                         "Client visit", true, false, false, zero, true, zero)
@@ -1788,27 +1814,28 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // and the group keep their cascade (payMeal ⟹ Not eligible); nothing is disabled.
 
     @Test
-    void theDailyAllowanceGroupOpensOnFullByDefaultAndSavesBothFlagsFalse() {
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add travel").click();
+    void theDailyAllowanceGroupOpensOnFullByDefaultAndSavesBothFlagsFalse(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add travel");
 
-        var group = dailyAllowance();
-        assertThat(group.getComponent().getLabel()).isEqualTo("Daily allowance");
-        assertThat(group.getSelected()).isEqualTo(TravelFormModel.DailyAllowance.FULL);
-        assertThat(group.getComponent().getListDataView().getItems()
-                .map(TravelFormModel.DailyAllowance::label))
+        screenshot(page, "travel-editor");
+        var group = dailyAllowance(page);
+        assertThat(group.getLabel()).isEqualTo("Daily allowance");
+        assertThat(group.getSelectedItem())
+                .isEqualTo(TravelFormModel.DailyAllowance.FULL.label());
+        assertThat(group.getItems())
                 .containsExactly("Full daily allowance", "Halved, free lunch provided",
                         "Not eligible");
         // Vertical is Aura's default; the horizontal variant the frame draws is not set.
-        assertThat(group.getComponent().getThemeNames()).isEmpty();
+        assertThat(group.element().getAttribute("theme")).isNullOrEmpty();
         // The two checkboxes it replaces are gone; the two that stay are these.
-        assertThat(findCheckbox().inside(findDialog()).components())
-                .extracting(Checkbox::getLabel)
+        assertThat(dialog(page).find(UnifiedCheckbox.class).all())
+                .extracting(UnifiedCheckbox::getLabel)
                 .containsExactly("Charge expenses from customer?", "Pay meal allowance?");
 
-        fillMinimalTrip();
-        saveTrip();
-        findButton().withText("Save").click();
+        fillMinimalTrip(page);
+        saveDialog(page);
+        click(page, "Save");
 
         var trip = service.findMine(service.listMine().getFirst().id()).travels().getFirst();
         assertThat(trip.notEligibleForAllowance()).isFalse();
@@ -1816,16 +1843,16 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void choosingHalvedSavesEligibleWithAFreeLunch() {
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add travel").click();
-        fillMinimalTrip();
+    void choosingHalvedSavesEligibleWithAFreeLunch(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add travel");
+        fillMinimalTrip(page);
 
-        dailyAllowance().selectItem("Halved, free lunch provided");
+        dailyAllowance(page).selectItem("Halved, free lunch provided");
         // The per-diem previews halved: €54 → €27.
-        assertThat(tripPreviewText()).contains("€27.00");
-        saveTrip();
-        findButton().withText("Save").click();
+        assertThat(tripPreviewText(page)).contains("€27.00");
+        saveDialog(page);
+        click(page, "Save");
 
         var trip = service.findMine(service.listMine().getFirst().id()).travels().getFirst();
         assertThat(trip.notEligibleForAllowance()).isFalse();
@@ -1833,18 +1860,18 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void choosingNotEligibleSavesNotEligibleWithoutAFreeLunch() {
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add travel").click();
-        fillMinimalTrip();
+    void choosingNotEligibleSavesNotEligibleWithoutAFreeLunch(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add travel");
+        fillMinimalTrip(page);
 
-        dailyAllowance().selectItem("Not eligible");
+        dailyAllowance(page).selectItem("Not eligible");
         // Nothing earned: the no-allowances line stands in for the rows, and there is
         // no Trip total row to end on.
-        assertThat(dialogText(openDialogSaying("No allowances for this trip")))
+        assertThat(dialogText(openDialogSaying(page, "No allowances for this trip")))
                 .doesNotContain("Per diem allowance", "Trip total");
-        saveTrip();
-        findButton().withText("Save").click();
+        saveDialog(page);
+        click(page, "Save");
 
         var trip = service.findMine(service.listMine().getFirst().id()).travels().getFirst();
         assertThat(trip.notEligibleForAllowance()).isTrue();
@@ -1852,7 +1879,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void editingATripReadsItsFlagsBackIntoTheGroup() {
+    void editingATripReadsItsFlagsBackIntoTheGroup(UnifiedPage page) {
         // freeLunch=true → Halved; notEligible=true → Not eligible — the mapping read
         // in the other direction, so an edit opens on what was saved.
         var zero = BigDecimal.ZERO.setScale(2);
@@ -1861,89 +1888,99 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = service.create(new ReportDetailDto(null, LocalDate.of(2026, 7, 10),
                 "seed", ReportStatus.DRAFT, 0L, List.of(), List.of(halved), zero, zero,
                 zero, zero, zero, zero));
-        navigate(ReportDetailView.class, id);
-        clickRowAction(TRIP, "Edit");
-        assertThat(dailyAllowance().getSelected())
-                .isEqualTo(TravelFormModel.DailyAllowance.HALVED);
-        findButton().withText("Cancel").inside(findDialog()).click();
+        page.navigate(ReportDetailView.class, id);
+        clickRowAction(page, TRIP, "Edit");
+        assertThat(dailyAllowance(page).getSelectedItem())
+                .isEqualTo(TravelFormModel.DailyAllowance.HALVED.label());
+        click(dialog(page), "Cancel");
 
-        var mealId = seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
+        var mealId = fixtures.seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
-        navigate(ReportDetailView.class, mealId);
-        clickRowAction(TRIP, "Edit");
-        assertThat(dailyAllowance().getSelected())
-                .isEqualTo(TravelFormModel.DailyAllowance.NOT_ELIGIBLE);
-        assertThat(checkboxValue("Pay meal allowance?")).isTrue();
+        page.navigate(ReportDetailView.class, mealId);
+        clickRowAction(page, TRIP, "Edit");
+        assertThat(dailyAllowance(page).getSelectedItem())
+                .isEqualTo(TravelFormModel.DailyAllowance.NOT_ELIGIBLE.label());
+        assertThat(checkboxValue(page, "Pay meal allowance?")).isTrue();
     }
 
     @Test
-    void checkingPayMealAllowanceSelectsNotEligible() {
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add travel").click();
-        dailyAllowance().selectItem("Halved, free lunch provided");
+    void checkingPayMealAllowanceSelectsNotEligible(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add travel");
+        dailyAllowance(page).selectItem("Halved, free lunch provided");
 
-        findCheckbox().withLabel("Pay meal allowance?").click();
+        checkbox(page, "Pay meal allowance?").check();
 
         // Meal allowance needs "no per-diem": the group moves to Not eligible, which
         // by construction drops the free lunch too.
-        assertThat(checkboxValue("Pay meal allowance?")).isTrue();
-        assertThat(dailyAllowance().getSelected())
-                .isEqualTo(TravelFormModel.DailyAllowance.NOT_ELIGIBLE);
+        assertThat(checkboxValue(page, "Pay meal allowance?")).isTrue();
+        assertThat(dailyAllowance(page).getSelectedItem())
+                .isEqualTo(TravelFormModel.DailyAllowance.NOT_ELIGIBLE.label());
     }
 
     @Test
-    void selectingFullClearsPayMealAllowance() {
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add travel").click();
-        findCheckbox().withLabel("Pay meal allowance?").click();
-        assertThat(dailyAllowance().getSelected())
-                .isEqualTo(TravelFormModel.DailyAllowance.NOT_ELIGIBLE);
+    void selectingFullClearsPayMealAllowance(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add travel");
+        checkbox(page, "Pay meal allowance?").check();
+        assertThat(dailyAllowance(page).getSelectedItem())
+                .isEqualTo(TravelFormModel.DailyAllowance.NOT_ELIGIBLE.label());
 
-        dailyAllowance().selectItem("Full daily allowance");
+        dailyAllowance(page).selectItem("Full daily allowance");
 
         // A per-diem applies again, so the meal allowance can't stand.
-        assertThat(checkboxValue("Pay meal allowance?")).isFalse();
-        assertThat(dailyAllowance().getSelected())
-                .isEqualTo(TravelFormModel.DailyAllowance.FULL);
+        assertThat(checkboxValue(page, "Pay meal allowance?")).isFalse();
+        assertThat(dailyAllowance(page).getSelectedItem())
+                .isEqualTo(TravelFormModel.DailyAllowance.FULL.label());
     }
 
     @Test
-    void selectingHalvedClearsPayMealAllowance() {
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add travel").click();
-        findCheckbox().withLabel("Pay meal allowance?").click();
+    void selectingHalvedClearsPayMealAllowance(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add travel");
+        checkbox(page, "Pay meal allowance?").check();
 
-        dailyAllowance().selectItem("Halved, free lunch provided");
+        dailyAllowance(page).selectItem("Halved, free lunch provided");
 
-        assertThat(checkboxValue("Pay meal allowance?")).isFalse();
-        assertThat(dailyAllowance().getSelected())
-                .isEqualTo(TravelFormModel.DailyAllowance.HALVED);
+        assertThat(checkboxValue(page, "Pay meal allowance?")).isFalse();
+        assertThat(dailyAllowance(page).getSelectedItem())
+                .isEqualTo(TravelFormModel.DailyAllowance.HALVED.label());
     }
 
     @Test
-    void travelEditorLaysItsFieldsOutAsTheDesignsTwoSectionGrid() {
+    void travelEditorLaysItsFieldsOutAsTheDesignsTwoSectionGrid(UnifiedPage page) {
         // travel-editor-dialog.md § Layout — #179 delta items 1–4, 7, 13: one
         // two-column grid with the line editor's gaps, two eyebrows and two rules as
         // colspan-2 rows, the design's field order, and the totals as the last row.
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add travel").click();
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add travel");
 
-        var dialog = findDialog().getComponent();
-        assertThat(dialog.getWidth()).isEqualTo("35rem");
+        screenshot(page, "travel-editor-empty");
+
+        var dialog = dialog(page);
+        assertThat(dialog.element().getProperty("width")).isEqualTo("35rem");
         assertThat(dialog.getHeaderTitle()).isEqualTo("Add travel info");
 
-        var form = $(FormLayout.class).single();
-        assertThat(form.getResponsiveSteps())
-                .extracting(step -> step.toJson().toString())
-                .containsExactly(
-                        new FormLayout.ResponsiveStep("0", 1).toJson().toString(),
-                        new FormLayout.ResponsiveStep("24rem", 2).toJson().toString());
+        var form = dialog.find(UnifiedFormLayout.class).single();
+        assertThat(form.getResponsiveSteps()).containsExactly("0:1", "24rem:2");
         assertThat(form.getColumnSpacing()).isEqualTo("var(--em-section-gap)");
         assertThat(form.getRowSpacing()).isEqualTo("var(--em-card-padding)");
 
+        // Until the dates are complete the totals and the rule above them hide.
+        var children = form.getChildren();
+        assertThat(children).hasSize(15);
+        assertThat(children.get(13).isVisible()).isFalse();
+        assertThat(children.get(14).isVisible()).isFalse();
+        fillMinimalTrip(page);
+        screenshot(page, "travel-editor-filled");
+        children = form.getChildren();
+        assertThat(children.get(13).isVisible()).isTrue();
+        assertThat(children.get(14).isVisible()).isTrue();
+
         // The design's order, read off the grid's children. Eyebrows are Spans with
         // the .section-label role, rules are Hr.form-rule, the totals a Div.trip-totals.
-        var children = form.getChildren().toList();
+        // Read once everything shows: Flow sends a hidden component's classes to the
+        // browser only when it becomes visible, so a browser sees bare placeholders.
         assertThat(children).extracting(ReportDetailViewUiTest::gridCell).containsExactly(
                 "eyebrow:Destinations", "DateTimePicker:Departure", "DateTimePicker:Return",
                 "ComboBox:Destination country", "TextField:Destinations",
@@ -1952,185 +1989,190 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
                 "BigDecimalField:Kilometre allowance (km)",
                 "BigDecimalField:Parking fees (€)", "RadioButtonGroup:Daily allowance",
                 "Checkbox:Pay meal allowance?", "rule", "totals");
-        assertThat(children).extracting(form::getColspan)
+        assertThat(children).extracting(UnifiedFormLayout::colspanOf)
                 .containsExactly(2, 1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2);
         // The rules carry no margin of their own — the grid's row gap spaces them.
-        assertThat(children.get(6).getStyle().get("margin")).isNull();
+        assertThat(UnifiedElements.style(children.get(6)).get("margin")).isNull();
 
-        // Until the dates are complete the totals and the rule above them hide.
-        assertThat(children.get(13).isVisible()).isFalse();
-        assertThat(children.get(14).isVisible()).isFalse();
-        fillMinimalTrip();
-        assertThat(children.get(13).isVisible()).isTrue();
-        assertThat(children.get(14).isVisible()).isTrue();
         // Label and figure are separate spans in the totals card's classes; Trip
         // total is the LAST row, and the block paints no surface of its own.
-        var totals = (Div) children.get(14);
-        var rows = totals.getChildren().toList();
-        assertThat(rows.getLast().getElement().getTextRecursively())
-                .isEqualTo("Trip total€54.00");
-        assertThat(findSpan().withText("Trip total").getComponent().getClassNames())
-                .contains("totals-total-row");
-        assertThat(findSpan().withText("€54.00").inside(findDialog()).components())
-                .anySatisfy(span -> assertThat(span.getClassNames()).contains("totals-grand"));
-        assertThat(totals.getClassNames()).contains("trip-totals")
+        var totals = children.get(14);
+        var rows = UnifiedElements.children(totals);
+        // Whitespace dropped: a browser's text puts a line break between the spans.
+        assertThat(rows.getLast().getText().replaceAll("\\s+", ""))
+                .isEqualTo("Triptotal€54.00");
+        assertThat(dialog.find(UnifiedSpan.class).withClassName("totals-total-row").all())
+                .extracting(ReportDetailViewUiTest::rawText).containsExactly("Trip total");
+        assertThat(dialog.find(UnifiedSpan.class).withClassName("totals-grand").all())
+                .extracting(ReportDetailViewUiTest::rawText).contains("€54.00");
+        assertThat(UnifiedElements.classNames(totals)).contains("trip-totals")
                 .doesNotContain("travel-preview");
 
         // Footer: Cancel and a primary "Save" — no "Save trip", no close button.
-        assertThat(findButton().withText("Save").inside(findDialog()).exists()).isTrue();
-        assertThat(findButton().withText("Save trip").exists()).isFalse();
-        assertThat(dialog.isCloseOnEsc()).isTrue();
+        assertThat(hasButton(dialog(page), "Save")).isTrue();
+        assertThat(hasButton(page, "Save trip")).isFalse();
+        assertThat(dialog.element().getPropertyBoolean("noCloseOnEsc")).isFalse();
     }
 
     @Test
-    void travelEditorTitlesTheEditStateEditTravelInfo() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
-        clickRowAction(TRIP, "Edit");
-        assertThat(findDialog().getComponent().getHeaderTitle())
+    void travelEditorTitlesTheEditStateEditTravelInfo(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
+        page.navigate(ReportDetailView.class, id);
+        clickRowAction(page, TRIP, "Edit");
+        assertThat(dialog(page).getHeaderTitle())
                 .isEqualTo("Edit travel info");
     }
 
     /** "kind:label" for a field, or the grid row's role for a non-field child. */
-    private static String gridCell(Component child) {
-        if (child instanceof Span span && span.hasClassName("section-label")) {
-            return "eyebrow:" + span.getText();
+    private static String gridCell(UnifiedElement child) {
+        String tag = child.getTag();
+        if ("span".equals(tag) && UnifiedElements.hasClassName(child, "section-label")) {
+            return "eyebrow:" + rawText(child);
         }
-        if (child instanceof Hr hr && hr.hasClassName("form-rule")) {
+        if ("hr".equals(tag) && UnifiedElements.hasClassName(child, "form-rule")) {
             return "rule";
         }
-        if (child instanceof Div div && div.hasClassName("trip-totals")) {
+        if ("div".equals(tag) && UnifiedElements.hasClassName(child, "trip-totals")) {
             return "totals";
         }
-        return child.getClass().getSimpleName() + ":"
-                + ((HasLabel) child).getLabel();
+        String kind = switch (tag) {
+            case "vaadin-date-time-picker" -> "DateTimePicker";
+            case "vaadin-combo-box" -> "ComboBox";
+            case "vaadin-text-field" -> "TextField";
+            case "vaadin-checkbox" -> "Checkbox";
+            case "vaadin-big-decimal-field" -> "BigDecimalField";
+            case "vaadin-radio-group" -> "RadioButtonGroup";
+            default -> tag;
+        };
+        return kind + ":" + child.getProperty("label");
     }
 
     /** The open trip editor's {@code Daily allowance} radio group. */
-    private RadioButtonGroupLocator<TravelFormModel.DailyAllowance> dailyAllowance() {
-        return findRadioButtonGroup(TravelFormModel.DailyAllowance.class)
-                .withLabel("Daily allowance");
-    }
-
-    /** Clicks the trip editor's primary — "Save", scoped to the dialog because the
-     *  report behind it has a Save of its own. */
-    private void saveTrip() {
-        findButton().withText("Save").inside(findDialog()).click();
+    private static UnifiedRadioButtonGroup dailyAllowance(UnifiedPage page) {
+        return page.find(UnifiedRadioButtonGroup.class).withLabel("Daily allowance").single();
     }
 
     /** Dates, country, destinations and purpose for an 11-hour domestic trip. */
-    private void fillMinimalTrip() {
-        findDateTimePicker().withLabel("Departure").setValue(DEP);
-        findDateTimePicker().withLabel("Return").setValue(DEP.plusHours(11));
-        findComboBox(String.class).withLabel("Destination country")
+    private void fillMinimalTrip(UnifiedPage page) {
+        dateTimePicker(page, "Departure").setValue(DEP);
+        dateTimePicker(page, "Return").setValue(DEP.plusHours(11));
+        comboBox(page, "Destination country")
                 .selectItem("Finland (domestic)");
-        findTextField().withLabel("Destinations").setValue("Helsinki");
-        findTextField().withLabel("Travel purpose").setValue("Client visit");
+        textField(page, "Destinations").setValue("Helsinki");
+        textField(page, "Travel purpose").setValue("Client visit");
     }
 
     /** The current value of the dialog checkbox carrying the given label. */
-    private boolean checkboxValue(String label) {
-        return ((Checkbox) findCheckbox().withLabel(label).getComponent()).getValue();
+    private boolean checkboxValue(UnifiedPage page, String label) {
+        return checkbox(page, label).isChecked();
     }
 
     @Test
-    void removingATripRemovesItsPerDiemOnSave() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+    void removingATripRemovesItsPerDiemOnSave(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        assertThat(viewText(page))
                 .contains("Per diem allowance");
 
-        clickRowAction(TRIP, "Remove");
-        findButton().withText("Save").click();
+        clickRowAction(page, TRIP, "Remove");
+        click(page, "Save");
 
         assertThat(service.findMine(id).travels()).isEmpty();
         assertThat(service.findMine(id).perDiemTotal()).isEqualByComparingTo("0.00");
     }
 
     @Test
-    void choosingADepartureConstrainsTheReturnPickerRangeAndViceVersa() {
-        navigate(ReportDetailView.class);
+    void choosingADepartureConstrainsTheReturnPickerRangeAndViceVersa(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
 
-        findButton().withAriaLabel("Add travel").click();
-        findDateTimePicker().withLabel("Departure").setValue(DEP);
-        findDateTimePicker().withLabel("Return").setValue(DEP.plusHours(11));
+        clickNamed(page, "Add travel");
+        dateTimePicker(page, "Departure").setValue(DEP);
+        dateTimePicker(page, "Return").setValue(DEP.plusHours(11));
 
         // The overlay can no longer offer an invalid range: the return can't reach
         // back to the departure, nor the departure forward to the return. The bounds
         // sit one 15-minute step clear of each other, not on the other's instant —
         // setMin/setMax are inclusive while the trip rule is strict, so an unshifted
         // bound still offers the same instant on both sides (issue #140).
-        var ret = (DateTimePicker) findDateTimePicker().withLabel("Return")
-                .getComponent();
-        var dep = (DateTimePicker) findDateTimePicker().withLabel("Departure")
-                .getComponent();
+        var ret = dateTimePicker(page, "Return");
+        var dep = dateTimePicker(page, "Departure");
         assertThat(ret.getMin()).isEqualTo(DEP.plusMinutes(15));
         assertThat(dep.getMax()).isEqualTo(DEP.plusHours(11).minusMinutes(15));
     }
 
     @Test
-    void aReturnEqualToTheDepartureIsRefusedAndSaysWhy() {
-        // The reported case: same date *and* same time on both sides. The tester
-        // refuses to type it at all now that the return's min sits a step past the
-        // departure, so set it straight on the component — the way a crafted client
-        // would — and prove the value still never reaches a save silently: the
+    void aReturnEqualToTheDepartureIsRefusedAndSaysWhy(UnifiedPage page) {
+        // The reported case: same date *and* same time on both sides. The overlay
+        // no longer offers it now that the return's min sits a step past the
+        // departure, so type it past the constraint — by hand in a browser, straight
+        // on the component on Browserless, whose tester refuses it — and prove the
+        // value still never reaches a save silently: the
         // binder's constraint validation lands the rule in the dialog's error
         // summary, not in the generic "something went wrong" dialog (issue #140).
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
 
-        findButton().withAriaLabel("Add travel").click();
-        findDateTimePicker().withLabel("Departure").setValue(DEP);
-        findComboBox(String.class).withLabel("Destination country")
+        clickNamed(page, "Add travel");
+        dateTimePicker(page, "Departure").setValue(DEP);
+        comboBox(page, "Destination country")
                 .selectItem("Finland (domestic)");
-        findTextField().withLabel("Destinations").setValue("Helsinki");
-        findTextField().withLabel("Travel purpose").setValue("Client visit");
+        textField(page, "Destinations").setValue("Helsinki");
+        textField(page, "Travel purpose").setValue("Client visit");
 
-        var ret = (DateTimePicker) findDateTimePicker().withLabel("Return")
-                .getComponent();
-        ret.setValue(DEP);
+        dateTimePicker(page, "Return").typeOutOfRange(DEP);
 
-        saveTrip();
+        saveDialog(page);
+        screenshot(page, "range-rule-summary");
 
-        var text = UI.getCurrent().getElement().getTextRecursively();
+        var text = dialogText(page);
         assertThat(text).contains("Return must be after the departure");
         assertThat(text).doesNotContain("Something went wrong");
         // The dialog stays open and the trip is not committed.
-        assertThat(findButton().withText("Save").inside(findDialog()).exists()).isTrue();
-        assertThat(findSpan().withText("Per diem allowance").exists()).isFalse();
+        assertThat(hasButton(dialog(page), "Save")).isTrue();
+        assertThat(hasSpan(page, "Per diem allowance")).isFalse();
     }
 
     @Test
-    void anIncompleteTripShowsTheErrorSummaryAndGeneratesNothing() {
+    void anIncompleteTripShowsTheErrorSummaryAndGeneratesNothing(UnifiedPage page) {
         // The reciprocal min/max on the pickers keeps the *overlay* from producing an
         // invalid range (see the constraint test above), but a hand-typed one still
         // reaches Save — covered by the range-rule tests above. Here we prove the
         // always-enabled Save + error-summary rule (ADR-0020) on the other invalid
         // case: missing required fields.
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
 
-        findButton().withAriaLabel("Add travel").click();
-        saveTrip();
+        clickNamed(page, "Add travel");
+        saveDialog(page);
 
         // The dialog overlay carries the reasons and stays open; nothing generated.
-        assertThat(UI.getCurrent().getElement().getTextRecursively()).contains(
+        assertThat(dialogText(page)).contains(
                 "Departure date & time is required", "Destinations are required");
-        assertThat(findButton().withText("Save").inside(findDialog()).exists()).isTrue();
-        assertThat(findSpan().withText("Per diem allowance").exists()).isFalse();
+        assertThat(hasButton(dialog(page), "Save")).isTrue();
+        assertThat(hasSpan(page, "Per diem allowance")).isFalse();
     }
 
+    /**
+     * Issue #85 for the trip's date-time pickers: their i18n carries an incomplete-input,
+     * a bad-input and both range messages, so none reaches the summary as a blank bullet.
+     *
+     * <p><strong>Browserless only</strong> ({@code @RequiresTestingTool}, ADR-0027 §4).
+     * The messages are server-side configuration: a browser's {@code i18n} property
+     * carries only the formatting keys ({@code firstDayOfWeek}, {@code formatDate},
+     * {@code parseDate}), so there is nothing to read there. The portable form would type
+     * a date without a time, or garbage, into one half of the picker — which Browserless
+     * can't express: {@code DateTimePickerTester} takes only a whole
+     * {@code LocalDateTime}, and the half-pickers are internal components. The min rule
+     * is covered portably by {@link #aReturnEqualToTheDepartureIsRefusedAndSaysWhy}.
+     */
     @Test
-    void travelPickersCarryIncompleteAndBadInputErrorMessages() {
-        // Issue #85: entering only the date (not the time) in a departure/return
-        // picker makes it invalid; without the incomplete-input message that error
-        // reached the summary blank. The tester can't produce partial input, so we
-        // assert the messages that prevent a blank error are configured.
-        navigate(ReportDetailView.class);
-        findButton().withAriaLabel("Add travel").click();
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void travelPickersCarryIncompleteAndBadInputErrorMessages(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
+        clickNamed(page, "Add travel");
 
         for (String label : new String[] { "Departure", "Return" }) {
-            var picker = (DateTimePicker) findDateTimePicker().withLabel(label)
-                    .getComponent();
+            // The escape hatch: the server-side component, the only place the i18n is.
+            var picker = dateTimePicker(page, label).unwrap(DateTimePicker.class);
             assertThat(picker.getI18n()).as(label + " i18n").isNotNull();
             assertThat(picker.getI18n().getIncompleteInputErrorMessage())
                     .as(label + " incomplete-input message").isNotBlank();
@@ -2146,33 +2188,33 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aSubmittedReportShowsTheTripButHidesEveryTripAction() {
-        var id = seedSubmittedReportWithTravel(LocalDate.of(2026, 7, 10), DEP,
+    void aSubmittedReportShowsTheTripButHidesEveryTripAction(UnifiedPage page) {
+        var id = fixtures.seedSubmittedReportWithTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The trip info and its per-diem are still visible (read path)…
-        var text = getCurrentView().getElement().getTextRecursively();
+        var text = viewText(page);
         assertThat(text).contains("Client visit", "Per diem allowance", "€54.00");
         // …a trip-only read-only report must not prompt "add your first": the empty
         // state is hidden, so no visible span carries it (ADR-0020)…
-        assertThat(findSpan().withText("No expenses yet — add your first.").exists())
+        assertThat(hasSpan(page, "No expenses yet — add your first."))
                 .isFalse();
         // …and every mutation surface is gone on a read-only report.
-        assertThat(findButton().withAriaLabel("Add travel").exists()).isFalse();
-        assertThat(rowActions(TRIP)).isEmpty();
-        assertThat($(RowActionMenu.class).all()).isEmpty();
+        assertThat(hasNamed(page, "Add travel")).isFalse();
+        assertThat(rowActions(page, TRIP)).isEmpty();
+        assertThat(rowMenus(page)).isEmpty();
     }
 
     @Test
-    void removingALinePersistsOnSave() {
-        var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+    void removingALinePersistsOnSave(UnifiedPage page) {
+        var id = fixtures.seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(getCurrentView().getElement().getTextRecursively()).contains("€60.00");
+        assertThat(viewText(page)).contains("€60.00");
 
-        clickRowAction($(RowActionMenu.class).first(), "Remove");
-        findButton().withText("Save").click();
+        rowMenus(page).getFirst().clickSubMenuItem("Remove");
+        click(page, "Save");
 
         assertThat(service.findMine(id).lines()).isEmpty();
     }
@@ -2185,68 +2227,79 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // colour are what /figma-visual-verification is for.
 
     @Test
-    void eachSectionIsOneCardHoldingItsLinesAsRows() {
-        var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(31));
-        navigate(ReportDetailView.class, id);
-        findButton().withAriaLabel("Add expense").click();
-        addLineThroughEditor("40.00");
+    void eachSectionIsOneCardHoldingItsLinesAsRows(UnifiedPage page) {
+        var id = fixtures.seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(31));
+        page.navigate(ReportDetailView.class, id);
+        clickNamed(page, "Add expense");
+        addLineThroughEditor(page, "40.00");
+        screenshot(page, "two-section-cards");
 
         // Two cards for the whole view, not one per line: the travel variant and the
         // plain Expenses one.
-        var cards = $(Div.class).withClassName("expense-item-card").all();
+        // Re-queried until the page settles: right after the editor closes, a browser
+        // is still tearing down its overlay, and a page-wide div scan can find an
+        // element gone by the time its class is read.
+        var cards = settled(() -> page.find(UnifiedDiv.class)
+                .withClassName("expense-item-card").all());
         assertThat(cards).hasSize(2);
-        assertThat(cards.getFirst().getClassNames()).contains("expense-item-card--travel");
-        assertThat(cards.get(1).getClassNames())
+        assertThat(UnifiedElements.classNames(cards.getFirst().element()))
+                .contains("expense-item-card--travel");
+        assertThat(UnifiedElements.classNames(cards.get(1).element()))
                 .doesNotContain("expense-item-card--travel");
 
         // The travel card holds the trip row and both per-diem rows it generated —
         // nested INSIDE it, indented, rather than in a wrapper beside it.
-        assertThat(rowsIn(cards.getFirst())).hasSize(3);
-        assertThat(rowsIn(cards.getFirst()).get(1).getClassNames())
-                .contains("travel-line-row");
+        var travelRows = rowsIn(cards.getFirst());
+        assertThat(travelRows).hasSize(3);
+        assertThat(UnifiedElements.classNames(travelRows.get(1))).contains("travel-line-row");
         assertThat(rowsIn(cards.get(1))).hasSize(1);
 
         // And nothing is a .line-card any more.
-        assertThat($(HorizontalLayout.class).withClassName("line-card").all()).isEmpty();
+        assertThat(page.find(UnifiedHorizontalLayout.class).withClassName("line-card")
+                .exists()).isFalse();
     }
 
     @Test
-    void aSectionWithNoRowsRendersNoCard() {
-        var id = seedReport(LocalDate.of(2026, 7, 1), "empty");
-        navigate(ReportDetailView.class, id);
+    void aSectionWithNoRowsRendersNoCard(UnifiedPage page) {
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "empty");
+        page.navigate(ReportDetailView.class, id);
+        screenshot(page, "empty-draft");
 
         // A fresh draft has no trip and no line, so both cards are absent while both
         // headings and their Add actions stand.
-        assertThat($(Div.class).withClassName("expense-item-card").all()).isEmpty();
-        assertThat(findSpan().withText("Travel info").exists()).isTrue();
-        assertThat(findSpan().withText("Expenses").exists()).isTrue();
-        assertThat(findButton().withAriaLabel("Add travel").exists()).isTrue();
-        assertThat(findButton().withAriaLabel("Add expense").exists()).isTrue();
+        assertThat(page.find(UnifiedDiv.class).withClassName("expense-item-card")
+                .exists()).isFalse();
+        assertThat(hasSpan(page, "Travel info")).isTrue();
+        assertThat(hasSpan(page, "Expenses")).isTrue();
+        assertThat(hasNamed(page, "Add travel")).isTrue();
+        assertThat(hasNamed(page, "Add expense")).isTrue();
     }
 
     @Test
-    void aReadOnlyReportWithNothingInASectionRendersNoSectionAtAll() {
+    void aReadOnlyReportWithNothingInASectionRendersNoSectionAtAll(UnifiedPage page) {
         // No trip, and read-only: a "TRAVEL INFO" heading over nothing, beside an Add
         // the report cannot offer, is worse than no section (ADR-0020).
-        var id = seedSubmittedReport(LocalDate.of(2026, 7, 1), "80.00");
-        navigate(ReportDetailView.class, id);
+        var id = fixtures.seedSubmittedReport(LocalDate.of(2026, 7, 1), "80.00");
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(findSpan().withText("Travel info").exists()).isFalse();
-        assertThat(findSpan().withText("Expenses").exists()).isTrue();
+        assertThat(hasSpan(page, "Travel info")).isFalse();
+        assertThat(hasSpan(page, "Expenses")).isTrue();
     }
 
     @Test
-    void anExpenseRowDrawsItsTypesOwnGlyphAndNoColourSwatch() {
-        var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+    void anExpenseRowDrawsItsTypesOwnGlyphAndNoColourSwatch(UnifiedPage page) {
+        var id = fixtures.seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
+        page.navigate(ReportDetailView.class, id);
 
         // The glyph is the type's persisted icon (ADR-0026), not a colour hashed off
         // its name. seedReportWithLine files the line under the first active type,
         // Travel allowance, whose seeded glyph is `plane` (V15).
-        var glyph = $(Span.class).withClassName("expense-row-icon").single();
-        assertThat(find(SvgIcon.class, glyph).single().getSymbol()).isEqualTo("plane");
+        var glyph = page.find(UnifiedSpan.class).withClassName("expense-row-icon").single();
+        assertThat(glyph.findComponent(SvgIcon.class).single().element().getProperty("symbol"))
+                .isEqualTo("plane");
         // The hashed swatch is gone, along with the four-way --aura-red collision.
-        assertThat($(Div.class).withClassName("category-dot").all()).isEmpty();
+        assertThat(page.find(UnifiedDiv.class).withClassName("category-dot").exists())
+                .isFalse();
     }
 
     /**
@@ -2262,8 +2315,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void aTypeWithNoGlyphChosenRendersNoneAndStillNamesItself() {
-        var rate = firstActiveRate();
+    void aTypeWithNoGlyphChosenRendersNoneAndStillNamesItself(UnifiedPage page) {
+        var rate = fixtures.firstActiveRate();
         var type = referenceData.createExpenseType("Glyphless", rate.id(), null);
         var line = ExpenseLineDto.of(null, type.id(), type.name(), type.icon(),
                 rate.id(), rate.value(), new BigDecimal("12.00"), null);
@@ -2271,167 +2324,188 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = service.create(new ReportDetailDto(null, LocalDate.of(2026, 7, 1),
                 "seed", ReportStatus.DRAFT, 0L, List.of(line), zero, zero, zero));
 
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(find(SvgIcon.class,
-                $(Span.class).withClassName("expense-row-icon").single()).all())
-                .isEmpty();
-        assertThat(findSpan().withText("Glyphless").exists()).isTrue();
+        assertThat(page.find(UnifiedSpan.class).withClassName("expense-row-icon").single()
+                .findComponent(SvgIcon.class).exists()).isFalse();
+        assertThat(hasSpan(page, "Glyphless")).isTrue();
     }
 
     @Test
-    void aRowIsNotClickableAndTheMenuIsTheOnlyRouteToEditing() {
-        var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+    void aRowIsNotClickableAndTheMenuIsTheOnlyRouteToEditing(UnifiedPage page) {
+        var id = fixtures.seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
+        page.navigate(ReportDetailView.class, id);
 
         // Withdrawn with the card the row used to be: no .clickable anywhere, and the
         // row's own actions are exactly Edit and Remove behind the ⋮.
-        assertThat($(HorizontalLayout.class).withClassName("clickable").all()).isEmpty();
-        assertThat(rowActions("Travel allowance")).containsExactly("Edit", "Remove");
+        assertThat(page.find(UnifiedHorizontalLayout.class).withClassName("clickable")
+                .exists()).isFalse();
+        assertThat(rowActions(page, "Travel allowance")).containsExactly("Edit", "Remove");
     }
 
     @Test
-    void everyRowMenuIsNamedAfterItsRowAndEveryActionCarriesText() {
-        var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
+    void everyRowMenuIsNamedAfterItsRowAndEveryActionCarriesText(UnifiedPage page) {
+        var id = fixtures.seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("120"), true, new BigDecimal("12.00"));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
+        screenshot(page, "trip-rows");
 
         // "Actions" alone is useless on a page holding five of them, so each names
         // its row (ADR-0020, row-action-menu.md).
         // A per-diem-eligible trip earns no meal allowance — the two are mutually
         // exclusive under the Finnish rule (issue #93) — so this trip's four rows are
         // the trip itself plus per diem, kilometre and parking.
-        assertThat($(RowActionMenu.class).all())
-                .extracting(ReportDetailViewUiTest::triggerName)
+        assertThat(rowMenus(page))
+                .extracting(UnifiedMenuBar::getTriggerName)
                 .containsExactlyInAnyOrder("Actions for " + TRIP,
                         "Actions for Per diem allowance (full day)",
                         "Actions for Kilometre allowance",
                         "Actions for Parking");
         // And every item in every menu is text-labelled, never an icon alone.
-        assertThat($(RowActionMenu.class).all()).allSatisfy(menu ->
-                assertThat(menu.getItems().get(0).getSubMenu().getItems())
+        assertThat(rowMenus(page)).allSatisfy(menu ->
+                assertThat(menu.getSubMenuItems())
                         .isNotEmpty()
-                        .allSatisfy(item -> assertThat(item.getText()).isNotBlank()));
+                        .allSatisfy(item -> assertThat(item).isNotBlank()));
     }
 
     @Test
-    void aRowMenusNameFollowsTheTypeTheEditorChanges() {
-        var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
-        assertThat(triggerName($(RowActionMenu.class).single()))
+    void aRowMenusNameFollowsTheTypeTheEditorChanges(UnifiedPage page) {
+        var id = fixtures.seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
+        page.navigate(ReportDetailView.class, id);
+        assertThat(rowMenus(page)).singleElement()
+                .extracting(UnifiedMenuBar::getTriggerName)
                 .isEqualTo("Actions for Travel allowance");
 
         // The row keeps its component and re-reads the signal, so the accessible name
         // has to follow or it goes quietly stale.
-        openLineCardEditor();
-        findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
+        openLineCardEditor(page);
+        comboBox(page, "Expense type")
                 .selectItem("Accommodation");
-        saveExpense();
+        saveDialog(page);
 
-        assertThat(triggerName($(RowActionMenu.class).single()))
+        assertThat(rowMenus(page)).singleElement()
+                .extracting(UnifiedMenuBar::getTriggerName)
                 .isEqualTo("Actions for Accommodation");
     }
 
     @Test
-    void bothAddActionsReadAddAndAreToldApartByTheirAccessibleNames() {
-        var id = seedReport(LocalDate.of(2026, 7, 1), "empty");
-        navigate(ReportDetailView.class, id);
+    void bothAddActionsReadAddAndAreToldApartByTheirAccessibleNames(UnifiedPage page) {
+        var id = fixtures.seedReport(LocalDate.of(2026, 7, 1), "empty");
+        page.navigate(ReportDetailView.class, id);
 
         // The design labels both simply "Add", so the page carries two controls with
         // the same visible name and the aria-label is what names the section.
-        assertThat(findButton().withAriaLabel("Add travel").exists()).isTrue();
-        assertThat(findButton().withAriaLabel("Add expense").exists()).isTrue();
-        assertThat($(Button.class).withCondition(
-                button -> "Add".equals(button.getText())).all()).hasSize(2);
+        assertThat(hasNamed(page, "Add travel")).isTrue();
+        assertThat(hasNamed(page, "Add expense")).isTrue();
+        assertThat(buttons(page, "Add").all()).hasSize(2);
         // And the back link keeps its own name.
-        assertThat(findButton().withAriaLabel("Back to reports").exists()).isTrue();
+        assertThat(hasNamed(page, "Back to reports")).isTrue();
     }
 
     @Test
-    void onlyTheVatBearingGeneratedLineShowsANetVatSplit() {
+    void onlyTheVatBearingGeneratedLineShowsANetVatSplit(UnifiedPage page) {
         // Parking is VAT-bearing at 25.5 %; the per-diem, kilometre and meal lines are
         // statutory tax-free allowances. The design draws the same net/VAT string on
         // every generated row including the per-diem one, which is mock text rather
         // than a specification (#173).
-        var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
+        var id = fixtures.seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("120"), true, new BigDecimal("12.00"));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(splitOn("Parking")).startsWith("net ").contains("(25.5 %)");
-        assertThat(splitOn("Per diem allowance (full day)")).isNull();
-        assertThat(splitOn("Kilometre allowance")).isNull();
+        assertThat(splitOn(page, "Parking")).startsWith("net ").contains("(25.5 %)");
+        assertThat(splitOn(page, "Per diem allowance (full day)")).isNull();
+        assertThat(splitOn(page, "Kilometre allowance")).isNull();
 
         // …and the meal allowance, which this trip does not earn, on one that does.
-        navigate(ReportDetailView.class, seedReportWithMealTravel(
+        page.navigate(ReportDetailView.class, fixtures.seedReportWithMealTravel(
                 LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11)));
-        assertThat(splitOn("Meal allowance")).isNull();
+        assertThat(splitOn(page, "Meal allowance")).isNull();
     }
 
     @Test
-    void aReadOnlyReportRendersNoRowMenusAndNoAddActionsButKeepsItsReceipts() {
-        var id = seedReportWithReceipt(LocalDate.of(2026, 7, 1), "70.00", "hotel.jpg");
+    void aReadOnlyReportRendersNoRowMenusAndNoAddActionsButKeepsItsReceipts(UnifiedPage page) {
+        var id = fixtures.seedReportWithReceipt(LocalDate.of(2026, 7, 1), "70.00", "hotel.jpg");
         service.submit(id, service.findMine(id).version());
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // No menu at all — not a disabled trigger — and neither Add action.
-        assertThat($(RowActionMenu.class).all()).isEmpty();
-        assertThat(findButton().withAriaLabel("Add expense").exists()).isFalse();
-        assertThat(findButton().withAriaLabel("Add travel").exists()).isFalse();
+        assertThat(rowMenus(page)).isEmpty();
+        assertThat(hasNamed(page, "Add expense")).isFalse();
+        assertThat(hasNamed(page, "Add travel")).isFalse();
         // The receipt stays activatable, so a submitted report's receipts remain
         // viewable (ADR-0021).
-        assertThat(findButton().withAriaLabel("Preview receipt: hotel.jpg").exists())
-                .isTrue();
+        assertThat(hasNamed(page, "Preview receipt: hotel.jpg")).isTrue();
     }
 
     @Test
-    void anAttachmentRendersAsAPaperclipChipThatStillOpensThePreview() {
-        var id = seedReportWithReceipt(LocalDate.of(2026, 7, 1), "70.00", "hotel.jpg");
-        navigate(ReportDetailView.class, id);
+    void anAttachmentRendersAsAPaperclipChipThatStillOpensThePreview(UnifiedPage page) {
+        var id = fixtures.seedReportWithReceipt(LocalDate.of(2026, 7, 1), "70.00", "hotel.jpg");
+        page.navigate(ReportDetailView.class, id);
 
         // The resting state is the design's chip — a paperclip and the filename — and
         // only the resting state changed: activating it opens the enlarge dialog.
-        var chip = $(Button.class).withClassName("expense-row-attachment").single();
+        var chip = page.find(UnifiedButton.class).withClassName("expense-row-attachment")
+                .single();
         assertThat(chip.getText()).isEqualTo("hotel.jpg");
-        assertThat(find(SvgIcon.class, chip).single().getSymbol()).isEqualTo("paperclip");
+        // The chip's icon, read from the attachments box that holds only the chip.
+        var box = page.find(UnifiedDiv.class).withClassName("expense-row-attachments").single();
+        assertThat(box.find(UnifiedButton.class).all()).hasSize(1);
+        assertThat(box.findComponent(SvgIcon.class).all())
+                .extracting(icon -> icon.element().getProperty("symbol"))
+                .containsExactly("paperclip");
 
-        test(chip).click();
-        assertThat($(Dialog.class).all()).anySatisfy(dialog ->
-                assertThat(dialog.isOpened()).isTrue());
-        assertThat($(Image.class).exists()).isTrue();
+        chip.click();
+        screenshot(page, "receipt-enlarged");
+        assertThat(hasOpenDialog(page)).isTrue();
+        assertThat(dialog(page).findComponent(Image.class).withAttribute("alt", "hotel.jpg")
+                .exists()).isTrue();
     }
 
     @Test
-    void theStatusHistoryIsOneBoxWithItsSharedSectionHeading() {
-        var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Missing receipt");
-        navigate(ReportDetailView.class, id);
+    void theStatusHistoryIsOneBoxWithItsSharedSectionHeading(UnifiedPage page) {
+        var id = fixtures.seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Missing receipt");
+        page.navigate(ReportDetailView.class, id);
+        screenshot(page, "status-history");
 
         // One box holding every entry, not one bordered box per entry, under the same
         // uppercase .section-label role the other two section headings use.
-        var box = $(Div.class).withClassName("status-history-box").single();
-        assertThat(box.getChildren().count()).isEqualTo(2);       // Submitted, Rejected
-        assertThat($(Span.class)
-                .withCondition(span -> "Status history".equals(span.getText()))
-                .single().getClassNames())
-                .contains("section-label");
-        assertThat($(VerticalLayout.class).withClassName("status-history-entry").all())
-                .hasSize(2);
+        var box = page.find(UnifiedDiv.class).withClassName("status-history-box").single();
+        assertThat(UnifiedElements.children(box.element())).hasSize(2); // Submitted, Rejected
+        assertThat(page.find(UnifiedSpan.class)
+                .where(span -> "Status history".equals(rawText(span))).single().element())
+                .satisfies(heading -> assertThat(UnifiedElements.classNames(heading))
+                        .contains("section-label"));
+        assertThat(page.findComponent(VerticalLayout.class)
+                .withClassName("status-history-entry").all()).hasSize(2);
+    }
+
+    // --------------------------------------------------------------- helpers
+
+    /** Runs {@code lookup}, once more if the page changed under it. */
+    private static <T> T settled(java.util.function.Supplier<T> lookup) {
+        try {
+            return lookup.get();
+        } catch (RuntimeException firstTry) {
+            return lookup.get();
+        }
     }
 
     /** Adds one expense line through the (already open) editor at the given amount. */
-    private void addLineThroughEditor(String amount) {
-        findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
-                .selectItem(firstActiveType().name());
-        findComboBox(VatRateDto.class).withLabel("VAT rate").selectItem("25.5 %");
-        findBigDecimalField().withLabel("Unit price")
+    private void addLineThroughEditor(UnifiedPage page, String amount) {
+        comboBox(page, "Expense type")
+                .selectItem(fixtures.firstActiveType().name());
+        comboBox(page, "VAT rate").selectItem("25.5 %");
+        bigDecimalField(page, "Unit price")
                 .setValue(new BigDecimal(amount));
-        saveExpense();
+        saveDialog(page);
+        // Until the dialog has closed, a page-wide scan can race its teardown.
+        page.waitUntil(() -> !hasOpenDialog(page));
     }
 
     /** The .expense-row children of one section card, in order. */
-    private static List<Component> rowsIn(Div card) {
-        return card.getChildren()
-                .filter(child -> child.getElement().getClassList()
-                        .contains("expense-row"))
+    private static List<UnifiedElement> rowsIn(UnifiedDiv card) {
+        return UnifiedElements.children(card.element()).stream()
+                .filter(child -> UnifiedElements.hasClassName(child, "expense-row"))
                 .toList();
     }
 
@@ -2440,16 +2514,14 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * none. Read off the row rather than the whole view, since a manual line beside
      * it would otherwise satisfy the assertion.
      */
-    private String splitOn(String rowLabel) {
-        var row = $(HorizontalLayout.class)
-                .withCondition(candidate -> candidate.getElement().getClassList()
-                        .contains("expense-row")
-                        && candidate.getElement().getTextRecursively()
-                                .startsWith(rowLabel))
-                .single();
-        return find(Span.class, row).withCondition(
-                        span -> span.getText().startsWith("net ")).all().stream()
-                .map(Span::getText).findFirst().orElse(null);
+    private static String splitOn(UnifiedPage page, String rowLabel) {
+        var rows = page.find(UnifiedHorizontalLayout.class).withClassName("expense-row")
+                .where(row -> rawText(row).startsWith(rowLabel)).all();
+        assertThat(rows).as("rows starting with '%s'", rowLabel).hasSize(1);
+        return rows.getFirst().find(UnifiedSpan.class).all().stream()
+                .map(span -> rawText(span.element()))
+                .filter(text -> text.startsWith("net "))
+                .findFirst().orElse(null);
     }
 
     /**
@@ -2457,74 +2529,173 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * clickable — the ⋮ menu is the only route to editing (#172) — so this opens the
      * first row's menu and chooses Edit.
      */
-    private void openLineCardEditor() {
-        clickRowAction($(RowActionMenu.class).first(), "Edit");
+    private static void openLineCardEditor(UnifiedPage page) {
+        rowMenus(page).getFirst().clickSubMenuItem("Edit");
     }
 
     /**
-     * Clicks the line editor's primary button. It reads {@code Save} as of the
-     * design's frame (358:3267), which is also the report's own save button, so it
-     * has to be located <em>inside</em> the dialog rather than by text alone.
+     * Clicks the open dialog's primary button. It reads {@code Save} — the line
+     * editor (frame 358:3267) and the trip editor alike — which is also the report's
+     * own save button, so it has to be located <em>inside</em> the dialog.
      */
-    private void saveExpense() {
-        findButton().withText("Save").inside(findDialog()).click();
+    private static void saveDialog(UnifiedPage page) {
+        click(dialog(page), "Save");
     }
 
-    /** The line editor's ComboBox with the given label. */
-    private ComboBox<?> comboBox(String label) {
-        return $(ComboBox.class).withLabel(label).single();
+    /** Every row menu (⋮) on the page; the class keeps the shell's menu bars out. */
+    private static List<UnifiedMenuBar> rowMenus(UnifiedPage page) {
+        return page.find(UnifiedMenuBar.class).withClassName("row-action-menu").all();
     }
 
-    /** The line editor's BigDecimalField with the given label. */
-    private BigDecimalField bigDecimalField(String label) {
-        return findBigDecimalField().withLabel(label).getComponent();
-    }
-
-    /** The ⋮ trigger's accessible name, which must identify its row. */
-    private static String triggerName(RowActionMenu menu) {
-        return menu.getItems().get(0).getElement().getAttribute("aria-label");
-    }
-
-    /** The one row menu whose trigger names {@code rowLabel}. */
-    private RowActionMenu rowMenu(String rowLabel) {
-        return $(RowActionMenu.class)
-                .withCondition(menu -> ("Actions for " + rowLabel)
-                        .equals(triggerName(menu)))
-                .single();
+    /** The row menus whose trigger names {@code rowLabel} — none on a read-only row. */
+    private static List<UnifiedMenuBar> rowMenusFor(UnifiedPage page, String rowLabel) {
+        return rowMenus(page).stream()
+                .filter(menu -> ("Actions for " + rowLabel).equals(menu.getTriggerName()))
+                .toList();
     }
 
     /** Opens the named row's ⋮ and activates the named action. */
-    private void clickRowAction(String rowLabel, String action) {
-        clickRowAction(rowMenu(rowLabel), action);
-    }
-
-    /** Opens a row's ⋮ and activates the named action. */
-    private void clickRowAction(RowActionMenu menu, String action) {
-        List<MenuItem> items = menu.getItems().get(0).getSubMenu().getItems();
-        int index = -1;
-        for (int i = 0; i < items.size(); i++) {
-            if (action.equals(items.get(i).getText())) {
-                index = i;
-            }
-        }
-        assertThat(index).as("menu item '%s' is present", action).isNotNegative();
-        // Index rather than caption path: the top-level trigger is icon-only, so
-        // clickItem(String...) has no root caption to match against.
-        // The tester, not use(menu): 25.3's MenuBarLocator re-finds the menu from
-        // the UI, and a Grid cell component is not in that tree (F-082).
-        new MenuBarTester<>(menu).clickItem(0, index);
+    private static void clickRowAction(UnifiedPage page, String rowLabel, String action) {
+        var menus = rowMenusFor(page, rowLabel);
+        assertThat(menus).as("row menu for '%s'", rowLabel).hasSize(1);
+        assertThat(menus.getFirst().getSubMenuItems())
+                .as("menu item '%s' is present", action).contains(action);
+        menus.getFirst().clickSubMenuItem(action);
     }
 
     /** The text labels a row's ⋮ offers, in order — empty if it has no menu at all. */
-    private List<String> rowActions(String rowLabel) {
-        var menus = $(RowActionMenu.class)
-                .withCondition(menu -> ("Actions for " + rowLabel)
-                        .equals(triggerName(menu)))
+    private static List<String> rowActions(UnifiedPage page, String rowLabel) {
+        var menus = rowMenusFor(page, rowLabel);
+        return menus.isEmpty() ? List.of() : menus.getFirst().getSubMenuItems();
+    }
+
+    /** The view's own text — never a dialog's: dialogs are overlays outside it. */
+    private static String viewText(UnifiedPage page) {
+        return page.findComponent(ReportDetailView.class).withClassName("report-detail")
+                .single().element().getText();
+    }
+
+    /**
+     * An element's DOM text: {@code textContent} in a browser, the server-side string
+     * on Browserless (which has no such property and falls back to {@code getText}).
+     * Not {@code innerText}, which applies CSS {@code text-transform} (F-086).
+     */
+    private static String rawText(UnifiedElement element) {
+        String content = element.getProperty("textContent");
+        return (content == null ? element.getText() : content).strip();
+    }
+
+    private static String rawText(UnifiedWrapper wrapper) {
+        return rawText(wrapper.element());
+    }
+
+    /** Whether a visible span reads exactly {@code text}. */
+    private static boolean hasSpan(UnifiedPage page, String text) {
+        return page.find(UnifiedSpan.class)
+                .where(span -> span.isVisible() && text.equals(rawText(span))).exists();
+    }
+
+    /** Visible buttons reading {@code text} in {@code scope}. */
+    private static UnifiedButton.ButtonQuery buttons(Scope scope, String text) {
+        return scope.find(UnifiedButton.class).withText(text).where(UnifiedElement::isVisible);
+    }
+
+    private static void click(Scope scope, String text) {
+        buttons(scope, text).single().click();
+    }
+
+    private static boolean hasButton(Scope scope, String text) {
+        return buttons(scope, text).exists();
+    }
+
+    /** Visible buttons whose accessible name is {@code name} (an aria-label). */
+    private static UnifiedButton.ButtonQuery named(Scope scope, String name) {
+        return scope.find(UnifiedButton.class).withAccessibleName(name)
+                .where(UnifiedElement::isVisible);
+    }
+
+    private static void clickNamed(Scope scope, String name) {
+        named(scope, name).single().click();
+    }
+
+    private static boolean hasNamed(Scope scope, String name) {
+        return named(scope, name).exists();
+    }
+
+    /** The open dialogs, outermost first; a closing one drops out. */
+    private static List<UnifiedDialog> openDialogs(UnifiedPage page) {
+        return page.find(UnifiedDialog.class)
+                .where(dialog -> Boolean.TRUE.equals(dialog.getPropertyBoolean("opened")))
                 .all();
-        if (menus.isEmpty()) {
-            return List.of();
-        }
-        return menus.getFirst().getItems().get(0).getSubMenu().getItems().stream()
-                .map(MenuItem::getText).toList();
+    }
+
+    private static boolean hasOpenDialog(UnifiedPage page) {
+        return !openDialogs(page).isEmpty();
+    }
+
+    /** The outermost open dialog — the editor, when a confirm is nested in it. */
+    private static UnifiedDialog dialog(UnifiedPage page) {
+        page.waitUntil(() -> hasOpenDialog(page));
+        return openDialogs(page).getFirst();
+    }
+
+    /** What the open dialogs say — the text a user sees over the view. */
+    private static String dialogText(UnifiedPage page) {
+        return openDialogs(page).stream().map(ReportDetailViewUiTest::dialogText)
+                .collect(Collectors.joining("\n"));
+    }
+
+    private static String dialogText(UnifiedDialog dialog) {
+        return dialog.element().getText();
+    }
+
+    private static int colspan(UnifiedWrapper field) {
+        return UnifiedFormLayout.colspanOf(field.element());
+    }
+
+    private static UnifiedComboBox comboBox(UnifiedPage page, String label) {
+        return page.find(UnifiedComboBox.class).withLabel(label).single();
+    }
+
+    private static UnifiedBigDecimalField bigDecimalField(UnifiedPage page, String label) {
+        return page.find(UnifiedBigDecimalField.class).withLabel(label).single();
+    }
+
+    private static UnifiedIntegerField integerField(UnifiedPage page, String label) {
+        return page.find(UnifiedIntegerField.class).withLabel(label).single();
+    }
+
+    private static UnifiedTextArea textArea(UnifiedPage page, String label) {
+        return page.find(UnifiedTextArea.class).withLabel(label).single();
+    }
+
+    private static UnifiedTextField textField(UnifiedPage page, String label) {
+        return page.find(UnifiedTextField.class).withLabel(label).single();
+    }
+
+    private static UnifiedDateTimePicker dateTimePicker(UnifiedPage page, String label) {
+        return page.find(UnifiedDateTimePicker.class).withLabel(label).single();
+    }
+
+    private static UnifiedCheckbox checkbox(UnifiedPage page, String label) {
+        return page.find(UnifiedCheckbox.class).withLabel(label).single();
+    }
+
+    /**
+     * Activates the receipt's preview affordance and checks the enlarge dialog shows
+     * that receipt's image (its filename is the alt text), then closes it. Scoped to
+     * the dialog and the filename: a page-wide "an image exists" is satisfied by the
+     * app header's logo.
+     */
+    private void assertPreviewEnlarges(UnifiedPage page, String filename) {
+        clickNamed(page, "Preview receipt: " + filename);
+        screenshot(page, "preview-" + filename);
+        assertThat(openDialogSaying(page, "Close").findComponent(Image.class)
+                .withAttribute("alt", filename).exists()).isTrue();
+        click(openDialogSaying(page, "Close"), "Close");
+    }
+
+    private static UnifiedUpload upload(UnifiedPage page) {
+        return page.find(UnifiedUpload.class).single();
     }
 }

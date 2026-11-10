@@ -19,6 +19,14 @@ Context for every issue: Spring Boot 4.1.1, Vaadin 25.3.5, Java 25, Postgres
 | U-4 | `getText()` means different text per tool (`innerText` vs server string) | F-086 | draft |
 | U-5 | Playwright: class/attribute/theme filters are evaluated per element in Java | F-087 | draft |
 | U-6 | Custom wrappers can't carry a default filter; tag-less `findComponent` fails only in a browser | F-088 | draft |
+| U-7 | `findChildren(tag)` is direct children on Browserless, all descendants (shadow DOM too) on Playwright | F-089 | draft |
+| U-8 | Hidden elements: Browserless excludes them, a browser query includes them | F-090 | draft |
+| U-9 | Closed dialogs (incl. dev tools') match `UnifiedDialog` in a browser | F-091 | draft |
+| U-10 | Browserless `withAccessibleName` ignores the `accessibleName` property (`setAriaLabel`) | F-092 | draft |
+| U-11 | Playwright `isAt` misses client-side navigation; can't assert route-less error views | F-093 | draft |
+| U-12 | Browserless doesn't route uncaught listener exceptions to the session `ErrorHandler` | F-094 | draft |
+| U-13 | Core Set gaps: MenuBar, Upload, TextArea, BigDecimal/IntegerField, DateTimePicker, Tabs, tag Scopes | F-097, F-099 | draft |
+| U-14 | `@UnifiedSpringBootTest` on Browserless silently needs `browserless-test-spring` at runtime | F-100 | draft |
 
 ---
 
@@ -116,6 +124,19 @@ element (`where`, accessible name) should be checked one by one.
 
 ---
 
+> **Addendum to U-4 (F-095).** Beyond `text-transform`: a dialog's `getText()` is
+> `textContent` on Playwright while other components use `innerText`; innerText adds
+> line breaks between flex children; `getAttribute("style")` is formatted differently
+> per tool, and a `var()` shorthand (`gap: var(--x)`) shows only as empty longhands in
+> a browser. Ask: also a portable `getInlineStyle(name)`.
+>
+> **Addendum to U-5 (F-096).** Lazy wrappers re-resolve their whole chain on every
+> read, so the per-element cost multiplies (5.9 s vs 0.5 s for one rate-card test);
+> and a scan that lists ~170 candidates right after a dialog closes waits the full
+> timeout on the one that detached. Pushing the filter into the selector fixes both.
+
+---
+
 ## U-6 — Custom wrappers can't carry a default filter; a tag-less `findComponent` fails only in a browser
 
 **Problem.**
@@ -133,6 +154,108 @@ direction.
 1. Add a `selector` (or default-filter) attribute to `@UnifiedComponent`.
 2. Validate tag-less queries up front on every tool, so Browserless fails the same way
    a browser does.
+
+---
+
+## U-7 — `UnifiedElement.findChildren(tag)` means different things per tool
+
+**Problem.** Browserless returns direct children (`element().getChildren()`);
+Playwright returns every descendant (`locator.locator(tag)`), piercing shadow roots —
+`:scope > *` even returns a form layout's internal `<div id="layout">`. Browserless
+also throws `UnsupportedOperationException` (`Element.getTag()`) on a parent that mixes
+text nodes and components, such as a Button with an icon. There is no portable "direct
+children in order" and no wildcard tag.
+
+**Ask.** Direct light-DOM children on both tools (`:scope > tag` in a browser); skip
+text nodes on Browserless; an ordered `children()`.
+
+---
+
+## U-8 — Hidden elements count in a browser query but not on Browserless
+
+**Problem.** After `button.setVisible(false)` on a rendered button,
+`page.find(UnifiedButton.class).withText("Approve").exists()` is false on Browserless
+and true on Playwright: the element stays in the DOM with `hidden`. (A component that
+was never visible is absent on both.) Related: Flow defers a hidden component's
+attributes, so a class check on a hidden component passes on Browserless only.
+
+**Ask.** One rule on every tool — exclude `hidden` by default, or a `.visible()` filter
+— and document it.
+
+---
+
+## U-9 — Closed dialogs match `UnifiedDialog` in a browser
+
+**Problem.** In dev mode the page holds closed `<vaadin-dialog>`s from Vaadin's tooling
+(one has class `ai-dialog`). `page.find(UnifiedDialog.class).single()` finds the app's
+one open dialog on Browserless and four in a browser.
+
+**Ask.** Match open dialogs by default (or an `opened()` filter), and ignore dev-tools
+elements.
+
+---
+
+## U-10 — Browserless `withAccessibleName` ignores `setAriaLabel` on fields
+
+**Problem.** Flow's `setAriaLabel` on a field sets the `accessibleName` property, which
+the web component forwards to its inner `<input>`. Playwright finds the field by that
+name; `BrowserlessElement.accessibleName()` reads only a host `aria-label` attribute,
+then `label`, then text, and times out.
+
+**Ask.** Consult the `accessibleName` property on Browserless.
+
+---
+
+## U-11 — Playwright `isAt` and client-side navigation; route-less views
+
+**Problem.** (1) After clicking a `RouterLink`, `assertThat(page).isAt(View.class)`
+timed out with path `""` although the browser was at the target: the assertion polls
+`page.url()`, which the Java client refreshes only on the next browser call. (2)
+`isAt(view)` needs a route path, so a `RouteNotFoundError` view can't be asserted in a
+browser; Browserless uses `instanceof`.
+
+**Ask.** Read `location` via `evaluate` in `isAt`/`hasPath`; match error views by
+class.
+
+---
+
+## U-12 — Browserless doesn't reach the session `ErrorHandler`
+
+**Problem.** In a browser an uncaught exception in a click listener goes to
+`VaadinSession`'s `ErrorHandler` (the app shows its error dialog). On Browserless it is
+rethrown into the test (`MockVaadin.runUIQueue`), so a portable test of the app's error
+handling needs a per-tool wrapper.
+
+**Ask.** An opt-in Browserless setting that routes uncaught exceptions to the session
+error handler.
+
+---
+
+## U-13 — Core Set gaps a typical Flow app hits
+
+**Problem.** Porting one app's 14 UI test classes needed project wrappers for
+`MenuBar` and `Upload` (both with per-tool overrides: sub-menus exist only while open,
+and there is no portable upload), `TextArea`, `BigDecimalField`, `IntegerField`,
+`DateTimePicker`, a bare `Tabs` bar, `FormLayout`, and Scope wrappers bound to a real
+tag (`Div`, `Span`, `Nav`, the layouts). The Playwright DatePicker support casts the
+value to `LocalDate`, so raw or unparseable typing needs its own wrapper, and
+`DateTimePickerTester` can't type into one half of the picker.
+
+**Ask.** Add these to the Core Set (plus `Details`, see below), with a raw `typeText`
+on date fields. Our generic wrappers are available to contribute
+(`src/test/java/.../base/ui/unified/`).
+
+---
+
+## U-14 — Browserless under `@UnifiedSpringBootTest` silently needs `browserless-test-spring`
+
+**Problem.** With `unified-test-spring` and `unified-test-browserless` but without
+`browserless-test-spring`, everything compiles and every Browserless navigation fails
+with `Unable to create an instance of '<MainLayout>'`: views are built without Spring.
+The browser adapters are unaffected, so it looks like a Browserless flake.
+
+**Ask.** Bring the Spring module in transitively for Spring users, or fail fast under
+`@UnifiedSpringBootTest` with "add browserless-test-spring".
 
 ---
 

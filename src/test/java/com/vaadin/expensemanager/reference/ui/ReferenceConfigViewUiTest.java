@@ -3,152 +3,167 @@ package com.vaadin.expensemanager.reference.ui;
 import java.math.BigDecimal;
 
 import com.vaadin.expensemanager.base.ui.ErrorSummary;
-import com.vaadin.expensemanager.reference.VatRateDto;
-import com.vaadin.flow.component.UI;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedBigDecimalField;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedDialog;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Browserless test (pyramid layer 3, ADR-0012) for the shared reference-screen
- * machinery — the {@link ReferenceConfigView} base and the
+ * Unified UI test (pyramid layer 3, ADR-0027 proposed) for the shared
+ * reference-screen machinery — the {@link ReferenceConfigView} base and the
  * {@link com.vaadin.expensemanager.base.ui.EditorDialog} — exercised
  * <strong>once</strong> here, driven through {@link VatRateView} as a
- * representative kind. The per-kind view tests ({@link VatRateViewUiTest},
- * {@link ExpenseTypeViewUiTest}) then assert only their kind-specific columns and
- * fields/validators.
+ * representative kind. Runs unchanged on Browserless and Playwright. The per-kind
+ * view tests ({@link VatRateViewUiTest}, {@link ExpenseTypeViewUiTest}) then assert
+ * only their kind-specific columns and fields/validators.
  *
  * <p>Covers the shared contract: the grid renders its rows (data + text status +
  * actions), the add/edit dialog round-trips, an invalid Save shows the
  * top-of-form error summary and persists nothing (ADR-0020 always-enabled Save),
  * reorder swaps neighbours with boundary buttons disabled, and the active-toggle
  * retains the row as inactive (ADR-0018, never deletes).
+ *
+ * <p>The rate field is a {@code BigDecimalField}, outside the Core Set, so it is
+ * driven through the project's {@link UnifiedBigDecimalField}.
  */
 class ReferenceConfigViewUiTest extends AbstractReferenceDataViewUiTest {
 
-    private static final int RATE_COL = 0;
-    private static final int STATUS_COL = 1;
-    private static final int ACTIONS_COL = 2;
+    private static final String RATE = "Rate";
+    private static final String STATUS = "Status";
 
     // ---------------------------------------------------------- grid renders
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void gridRendersRowsWithTextStatusAndActions() {
-        navigate(VatRateView.class);
-        var grid = findGrid(VatRateDto.class);
+    void gridRendersRowsWithTextStatusAndActions(UnifiedPage page) {
+        page.navigate(VatRateView.class);
+        screenshot(page, "grid");
 
         // Data column + a text (never colour-only) status column.
-        assertThat(columnText(grid, RATE_COL)).containsExactly("25.5 %", "13.5 %", "10 %", "0 %");
-        assertThat(columnText(grid, STATUS_COL)).allMatch("Active"::equals);
+        assertThat(grid(page).column(RATE)).hasCellTexts("25.5 %", "13.5 %", "10 %", "0 %");
+        assertThat(columnText(page, STATUS)).allMatch("Active"::equals);
         // Each row carries an accessible Edit action.
-        assertThat(rowActionButton(grid, 0, ACTIONS_COL, "Edit rate 25.5 %")).isNotNull();
+        assertThat(rowAction(page, 0, "Edit rate 25.5 %")).isVisible();
     }
 
     // ------------------------------------------------------ add/edit round-trip
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void addThroughEditorAppendsActiveRow() {
-        navigate(VatRateView.class);
-        int before = findGrid(VatRateDto.class).size();
+    void addThroughEditorAppendsActiveRow(UnifiedPage page) {
+        page.navigate(VatRateView.class);
+        int before = grid(page).getRowCount();
 
-        findButton().withText("New").click();
-        findBigDecimalField().setValue(new BigDecimal("8.5"));
-        findButton().withText("Save").click();
+        button(page, "New").click();
+        screenshot(page, "editor-open");
+        rateField(page).setValue(new BigDecimal("8.5"));
+        button(page, "Save").click();
+        screenshot(page, "saved");
 
-        var grid = findGrid(VatRateDto.class);
-        assertThat(grid.size()).isEqualTo(before + 1);
-        assertThat(grid.getCellText(before, RATE_COL)).isEqualTo("8.5 %");
-        assertThat(grid.getCellText(before, STATUS_COL)).isEqualTo("Active");
+        assertThat(grid(page)).hasRowCount(before + 1);
+        assertThat(grid(page).row(before))
+                .hasCellText(RATE, "8.5 %")
+                .hasCellText(STATUS, "Active");
     }
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void editThroughEditorChangesTheRow() {
-        navigate(VatRateView.class);
+    void editThroughEditorChangesTheRow(UnifiedPage page) {
+        page.navigate(VatRateView.class);
 
-        test(rowActionButton(findGrid(VatRateDto.class), 1, ACTIONS_COL,
-                "Edit rate 13.5 %")).click();
-        findBigDecimalField().setValue(new BigDecimal("12"));
-        findButton().withText("Save").click();
+        rowAction(page, 1, "Edit rate 13.5 %").click();
+        screenshot(page, "editor-open");
+        rateField(page).setValue(new BigDecimal("12"));
+        button(page, "Save").click();
 
-        assertThat(columnText(findGrid(VatRateDto.class), RATE_COL))
-                .contains("12 %").doesNotContain("13.5 %");
+        assertThat(grid(page).row(1)).hasCellText(RATE, "12 %");
+        assertThat(columnText(page, RATE)).contains("12 %").doesNotContain("13.5 %");
     }
 
     // ------------------------------------------------------ error summary
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void invalidSaveShowsErrorSummaryAndPersistsNothing() {
-        navigate(VatRateView.class);
-        int before = findGrid(VatRateDto.class).size();
+    void invalidSaveShowsErrorSummaryAndPersistsNothing(UnifiedPage page) {
+        page.navigate(VatRateView.class);
+        int before = grid(page).getRowCount();
 
         // Always-enabled Save: submitting the empty required field surfaces the
         // top-of-form summary and writes nothing (ADR-0020).
-        findButton().withText("New").click();
-        findButton().withText("Save").click();
+        button(page, "New").click();
+        button(page, "Save").click();
+        screenshot(page, "error-summary");
 
-        // The summary heading + the failed field's message appear in the dialog
-        // overlay (UI-rooted, since the dialog renders outside the view tree).
-        assertThat(UI.getCurrent().getElement().getTextRecursively())
+        // The summary heading + the failed field's message appear in the dialog.
+        // The open one: in a browser in dev mode the page also holds closed
+        // <vaadin-dialog>s of Vaadin's own dev tooling, which Browserless never sees.
+        var dialog = page.find(UnifiedDialog.class)
+                .where(d -> Boolean.TRUE.equals(d.getPropertyBoolean("opened"))).single();
+        // ErrorSummary is a Div: by tag alone that is every <div> in the dialog,
+        // so its role class narrows it (scoped to the dialog, so cheap — F-087).
+        var summary = dialog.findComponent(ErrorSummary.class)
+                .withClassName("error-summary").single();
+        assertThat(summary).isVisible();
+        assertThat(summary.element().getText())
                 .contains("Please fix the following:")
                 .contains("Rate is required");
         // The field-level error is a focusable entry that navigates to its field
         // (the accessible error-summary pattern), not plain text.
-        assertThat(findButton().withText("Rate is required").exists()).isTrue();
+        assertThat(dialog.find(UnifiedButton.class).withText("Rate is required").single())
+                .isVisible();
         // The shared ErrorSummary carries the accessibility contract once, for
         // every form: a labelled, focusable group whose aria-labelledby names its
         // own heading. It is tabindex=0 (not the -1 the GOV.UK pattern would use)
         // so it joins a Dialog's focus trap and Tab-after-submit reaches the fields
         // rather than the dialog frame — see ErrorSummary and web-components#3486.
-        var summary = find(ErrorSummary.class).single();
-        assertThat(summary.getElement().getAttribute("role")).isEqualTo("group");
-        assertThat(summary.getElement().getAttribute("tabindex")).isEqualTo("0");
-        assertThat(summary.getElement().getAttribute("aria-labelledby"))
-                .isNotBlank();
+        assertThat(summary.element().getAttribute("role")).isEqualTo("group");
+        assertThat(summary.element().getAttribute("tabindex")).isEqualTo("0");
+        assertThat(summary.element().getAttribute("aria-labelledby")).isNotBlank();
         // The dialog stays open (Save still present) and no row was added.
-        assertThat(findButton().withText("Save").exists()).isTrue();
-        assertThat(findGrid(VatRateDto.class).size()).isEqualTo(before);
+        assertThat(button(page, "Save")).isVisible();
+        assertThat(grid(page)).hasRowCount(before);
     }
 
     // ----------------------------------------------------------- reorder
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void reorderSwapsRowsAndBoundaryButtonsAreDisabled() {
-        navigate(VatRateView.class);
-        var grid = findGrid(VatRateDto.class);
-        assertThat(columnText(grid, RATE_COL))
-                .containsExactly("25.5 %", "13.5 %", "10 %", "0 %");
+    void reorderSwapsRowsAndBoundaryButtonsAreDisabled(UnifiedPage page) {
+        page.navigate(VatRateView.class);
+        assertThat(grid(page).column(RATE)).hasCellTexts("25.5 %", "13.5 %", "10 %", "0 %");
 
-        assertThat(rowActionButton(grid, 0, ACTIONS_COL, "Move rate 25.5 % up")
-                .isEnabled()).isFalse();
-        assertThat(rowActionButton(grid, 3, ACTIONS_COL, "Move rate 0 % down")
-                .isEnabled()).isFalse();
+        assertThat(rowAction(page, 0, "Move rate 25.5 % up")).isDisabled();
+        assertThat(rowAction(page, 3, "Move rate 0 % down")).isDisabled();
 
-        test(rowActionButton(grid, 1, ACTIONS_COL, "Move rate 13.5 % up")).click();
+        rowAction(page, 1, "Move rate 13.5 % up").click();
+        screenshot(page, "reordered");
 
-        assertThat(columnText(findGrid(VatRateDto.class), RATE_COL))
-                .containsExactly("13.5 %", "25.5 %", "10 %", "0 %");
+        assertThat(grid(page).column(RATE)).hasCellTexts("13.5 %", "25.5 %", "10 %", "0 %");
     }
 
     // -------------------------------------------------------- active-toggle
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void deactivateRetainsRowAsInactive() {
-        navigate(VatRateView.class);
+    void deactivateRetainsRowAsInactive(UnifiedPage page) {
+        page.navigate(VatRateView.class);
 
-        test(rowActionButton(findGrid(VatRateDto.class), 0, ACTIONS_COL,
-                "Deactivate rate 25.5 %")).click();
+        rowAction(page, 0, "Deactivate rate 25.5 %").click();
+        screenshot(page, "deactivated");
 
-        var grid = findGrid(VatRateDto.class);
-        assertThat(grid.getCellText(0, RATE_COL)).isEqualTo("25.5 %");
-        assertThat(grid.getCellText(0, STATUS_COL)).isEqualTo("Inactive");
+        assertThat(grid(page).row(0))
+                .hasCellText(RATE, "25.5 %")
+                .hasCellText(STATUS, "Inactive");
         // The toggle now offers to re-activate the retained row.
-        assertThat(rowActionButton(grid, 0, ACTIONS_COL, "Activate rate 25.5 %")).isNotNull();
+        assertThat(rowAction(page, 0, "Activate rate 25.5 %")).isVisible();
+    }
+
+    private static UnifiedBigDecimalField rateField(UnifiedPage page) {
+        return page.find(UnifiedBigDecimalField.class).withLabel("Rate (%)").single();
     }
 }

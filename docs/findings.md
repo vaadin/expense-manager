@@ -3099,3 +3099,289 @@ Deployment/Observability · UX-spec
 - Suggested Vaadin/product improvement: a `selector`/default-filter on
   `@UnifiedComponent`; and validate tag-less queries up front on every tool. Upstream U-6.
 - Owner / next step: user files U-6.
+
+### F-089 — `UnifiedElement.findChildren(tag)` is direct children on Browserless and every descendant, shadow roots included, on Playwright
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Medium
+- Task being attempted: writing wrappers that read a component's parts (tab bar,
+  menu bar, form layout, rate card) while porting the rest of layer 3 to the Unified
+  API (ADR-0027). Four of five porting tasks hit it independently.
+- Expected vs actual: expected "children with this tag" to mean one thing. Browserless
+  uses `element().getChildren()` (direct children); Playwright uses
+  `locator.locator(tag)` (all descendants, piercing shadow DOM). So a count of
+  children differs by tool; `:scope > *` in a browser also returns a form layout's
+  internal `<div id="layout">` and a menu-bar button's own shadow
+  `vaadin-menu-bar-item`. Separately, Browserless `findChildren` throws
+  `UnsupportedOperationException` from `Element.getTag()` on any element that mixes
+  text nodes with components (a Button with an icon). There is no portable
+  "direct children, in order" and no wildcard tag (Browserless compares
+  `tag.equals`).
+- Workaround used: count by role class inside a scope instead; `UnifiedElements`
+  (`xpath=./*` in a browser, the component's child order on Browserless) and
+  `ElementSnapshot` (escape hatches) for order-sensitive anatomy checks. `UnifiedTabs`
+  relies on `<vaadin-tab>` never nesting.
+- Evidence: `BrowserlessElement#findChildren`, `PlaywrightElement#findChildren`;
+  `base/ui/unified/UnifiedElements.java`, `ElementSnapshot.java`;
+  `PageHeaderUiTest`, `AllowanceRatesViewUiTest` (rate card), `ReportDetailViewUiTest`
+  (form layout order).
+- Impact: any wrapper built on `findChildren` is silently tool-specific, in whichever
+  direction its author didn't test.
+- Suggested Vaadin/product improvement: define it as direct light-DOM children on
+  both tools (`:scope > tag` in the browser), skip text nodes on Browserless, and add
+  an ordered `children()`. Upstream U-7.
+- Owner / next step: user files U-7.
+
+### F-090 — A hidden component: Browserless does not find it, a browser does; and Flow does not send its classes or attributes until it is shown
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Medium
+- Task being attempted: "the Approve/Reject buttons are gone after approving"
+  (`ApprovalQueueViewUiTest`), "the delete action is gone" and the travel editor's
+  hidden rule placeholders (`ReportDetailViewUiTest`).
+- Expected vs actual: (1) after `setVisible(false)` on a rendered button,
+  `find(UnifiedButton.class).withText("Approve").exists()` is false on Browserless and
+  true on Playwright: the element stays in the DOM with `hidden`, and Dramafinder
+  applies no visibility filter. A component that was never visible is absent on both.
+  (2) a hidden `Hr` carries `class="form-rule"` on the server, but the browser sees
+  only `<hr hidden>` — Flow defers a hidden component's attributes — so a class or
+  attribute check on a hidden component passes on Browserless only.
+- Workaround used: every existence check and click goes through
+  `.where(UnifiedElement::isVisible)` (helpers `hasVisibleButton*`); class/attribute
+  assertions are made after the component is shown.
+- Evidence: `ApprovalQueueViewUiTest#hasVisibleButton`; `ReportDetailViewUiTest`
+  travel-editor grid order test.
+- Impact: the plain "the action is gone" assertion is green locally and red in CI;
+  the query API does not say whether hidden elements count.
+- Suggested Vaadin/product improvement: make both adapters agree — exclude `hidden`
+  by default or offer `.visible()` — and document it. Upstream U-8.
+- Owner / next step: user files U-8.
+
+### F-091 — Dev-mode tooling leaves closed `<vaadin-dialog>`s in the page, so `find(UnifiedDialog.class).single()` fails in a browser only
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Medium
+- Task being attempted: opening a reference-data editor dialog
+  (`ReferenceConfigViewUiTest`).
+- Expected vs actual: expected the editor to be the only dialog, as on Browserless.
+  On Playwright (dev mode) four match: the editor plus three closed dialogs the app
+  never creates (one has class `ai-dialog` — Copilot/dev tools).
+- Workaround used: `.where(d -> Boolean.TRUE.equals(d.getPropertyBoolean("opened")))`.
+- Evidence: `ReferenceConfigViewUiTest`; failure screenshot under
+  `target/surefire-reports/unified-evidence/`.
+- Impact: green on Browserless, red on the browser run; every app with dialogs that
+  runs browser tests in dev mode meets it.
+- Suggested Vaadin/product improvement: match only open dialogs by default (or an
+  `opened()` filter on `DialogQuery`), and ignore dev-tools elements. Upstream U-9.
+- Owner / next step: user files U-9.
+
+### F-092 — `withAccessibleName` misses a field named with `setAriaLabel` on Browserless only
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Medium
+- Task being attempted: finding the allowance view's unlabelled year selector by its
+  accessible name (ADR-0020's pattern for a field with no visible label).
+- Expected vs actual: `find(UnifiedComboBox.class).withAccessibleName("Year")` passes
+  on Playwright and times out on Browserless. Flow's field `setAriaLabel` sets the
+  `accessibleName` *property*, which the web component forwards to its inner
+  `<input>`; `BrowserlessElement.accessibleName()` reads only an `aria-label`
+  attribute on the host, then `label`, then text. Related: a Flow `MenuItem`'s
+  `aria-label` sits on the inner `<vaadin-menu-bar-item>`, not on the
+  `role="menuitem"` button, so a MenuBar cannot be found by its trigger's name on
+  either tool (a browser still computes the right name, so not an a11y bug).
+- Workaround used: `.where(e -> "Year".equals(e.getProperty("accessibleName")))`;
+  `UnifiedMenuBar#getTriggerName` reads the inner item's attribute.
+- Evidence: `AllowanceRatesViewUiTest#theToolbarSelectorIsUnlabelledButNamed`;
+  `BrowserlessElement#accessibleName`.
+- Impact: fails on the local run, for exactly the fields an accessibility-first app
+  names this way.
+- Suggested Vaadin/product improvement: Browserless should consult the
+  `accessibleName` property. Upstream U-10.
+- Owner / next step: user files U-10.
+
+### F-093 — On Playwright `isAt` does not see a client-side navigation finish, and cannot assert a view with no route
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Medium
+- Task being attempted: `NavigationShellUiTest` clicking a `RouterLink` pill and
+  asserting the not-found view.
+- Expected vs actual: (1) after clicking a `RouterLink`,
+  `assertThat(page).isAt(VatRateView.class)` timed out after 10 s with path `""`,
+  though the screenshot showed VAT rates and `location.href` was `/vat-rates`.
+  Inferred cause: the click's Auto-Wait returns before the router navigation, and the
+  assertion polls `page.url()`, which the Java Playwright client refreshes only on
+  another browser call. (2) `isAt(view)` needs the view's route path, so a
+  `RouteNotFoundError` view cannot be asserted on Playwright; Browserless uses
+  `instanceof` and works.
+- Workaround used: (1) `page.waitUntil(() -> <destination content>.exists())` before
+  `isAt` — any find goes to the browser; (2) `hasPath(...)` plus the content only that
+  view renders.
+- Evidence: `NavigationShellUiTest#theReferenceTablesPillIsAPlainLinkWithNoMenuBehindIt`,
+  `#unknownRouteResolvesToCustomNotFoundView`.
+- Impact: a correct navigation reads as a failure, only in a browser.
+- Suggested Vaadin/product improvement: read `location` through `evaluate` in
+  `isAt`/`hasPath` (or ping the page in `sync()`); match error views by class.
+  Upstream U-11.
+- Owner / next step: user files U-11.
+
+### F-094 — Browserless never routes an uncaught listener exception to the session's `ErrorHandler`, so error-handling flows diverge by design
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Medium
+- Task being attempted: `ErrorDialogFlowUiTest` — a failing action opens the app's
+  `ErrorDialog` through `UiErrorHandler`.
+- Expected vs actual: in a browser, Flow hands the exception to the session's error
+  handler and the dialog opens. On Browserless the exception is rethrown into the test
+  (documented on `MockVaadin.runUIQueue`), so the production path never runs. The old
+  test checked `instanceof` on the installed handler, or called it directly.
+- Workaround used: a test-only route `base/ui/ErrorFlowTestView` with buttons that
+  throw, and `UnifiedErrorHandlingButton`, whose Browserless override catches the
+  exception and passes it to `VaadinSession.getCurrent().getErrorHandler()`. The test
+  is now end-to-end on both tools.
+- Evidence: `base/ui/unified/UnifiedErrorHandlingButton.java`;
+  `ErrorDialogFlowUiTest#anUncaughtActionFailureReachesTheGlobalHandler`.
+- Impact: every app with a global error handler needs this wrapper to test it
+  portably.
+- Suggested Vaadin/product improvement: an opt-in Browserless adapter setting
+  "route uncaught exceptions to the session error handler". Upstream U-12.
+- Owner / next step: user files U-12.
+
+### F-095 — Text and inline style read differently per tool beyond `text-transform`
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Low
+- Task being attempted: comparing dialog, row and card text, and the inline `gap` /
+  `width` a layout API writes (`PageHeaderUiTest`, `AllowanceRatesViewUiTest`,
+  `ReportDetailViewUiTest`).
+- Expected vs actual: extends F-086. (1) a dialog's `getText()` is `textContent` on
+  Playwright while a generic component's is `innerText`; innerText puts line breaks
+  between flex children ("Trip total\n€54.00") where the server string has none.
+  (2) `getAttribute("style")` is `width:180px` on Browserless and `width: 180px;` in a
+  browser; a shorthand set through `var()` (`gap: var(--x)`, what
+  `setSpacing(String)` writes) shows in the browser's indexed style only as empty
+  `row-gap`/`column-gap`; `getCssValue` is browser-only.
+- Workaround used: compare spans by their `textContent` property; strip whitespace in
+  row text; normalise style strings; `ElementSnapshot` parses `cssText` in the browser
+  and uses `Element.getStyle()` on Browserless.
+- Evidence: `base/ui/unified/ElementSnapshot.java`, `UnifiedElements.java`.
+- Impact: small per assertion, but it is the class of difference "write once"
+  promises away.
+- Suggested Vaadin/product improvement: specify `getText()` per tool (as U-4) and add
+  a portable `getInlineStyle(name)`. Folded into U-4.
+- Owner / next step: user extends U-4.
+
+### F-096 — On Playwright lazy wrappers re-resolve their chain on every read, which multiplies F-087's cost and races a closing dialog
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Medium
+- Task being attempted: reading rate-card rows (`AllowanceRatesViewUiTest`) and line
+  cards right after an editor dialog closes (`ReportDetailViewUiTest`).
+- Expected vs actual: every read on `rateCard(page).find(UnifiedDiv.class)…`
+  re-scans every page `div` for the class, one round trip each: 5.9 s on Playwright
+  against 0.5 s on Browserless. Right after a dialog closes, a class scan lists ~170
+  `div`s and then reads each one's class; one is gone by then, and that read waits the
+  full 10 s timeout (`opened=false` is not enough to wait on).
+- Workaround used: none for the cost (a test id would push the filter into the
+  selector, but ADR-0027 §6 allows one only when there is nothing else to find by);
+  one retry (`settled(..)`) for the race — the 12.7 s test.
+- Evidence: `ReportDetailViewUiTest#eachSectionIsOneCardHoldingItsLinesAsRows`;
+  surefire timings.
+- Impact: browser runs are slow and occasionally flaky for reasons the test author
+  cannot see.
+- Suggested Vaadin/product improvement: U-5 (push class/attribute filters into the
+  selector) fixes both; meanwhile cache a resolved element for one assertion and skip
+  detached candidates. Folded into U-5.
+- Owner / next step: user extends U-5.
+
+### F-097 — A Flow app needs a dozen project wrappers before its tests can be ported
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Low
+- Task being attempted: porting the remaining 13 layer-3 classes (ADR-0027).
+- Expected vs actual: the Core Set covers fields, grid, dialog, tabsheet and
+  notifications. This app also needed: `TextArea`, `BigDecimalField`, `IntegerField`,
+  `DateTimePicker`, `Upload`, `MenuBar`, `FormLayout`, a bare `Tabs` bar, and Scope
+  wrappers bound to a real tag (`Div`, `Span`, `Nav`, `VerticalLayout`,
+  `HorizontalLayout` — `findComponent(..)` is not a Scope and `UnifiedContainer` is
+  `*`, F-087). `MenuBar` and `Upload` need per-tool overrides (sub-menu items exist
+  only while open, and opening is client-only, so Auto-Wait doesn't cover it; there is
+  no portable upload). The alpha's Playwright DatePicker casts to `LocalDate`, so
+  typing raw/unparseable text needs its own wrapper. Parallel porting produced
+  duplicate wrappers with different APIs, merged afterwards.
+- Workaround used: wrappers in `base/ui/unified/`, generic and upstreamable.
+- Evidence: `src/test/java/com/vaadin/expensemanager/base/ui/unified/`.
+- Impact: the entry cost of a "write once" suite is a wrapper library per app.
+- Suggested Vaadin/product improvement: add `MenuBar`, `Upload`, `TextArea`,
+  `BigDecimalField`, `IntegerField`, `DateTimePicker`, `Tabs`, `Details` and generic
+  tag Scopes to the Core Set; a raw `typeText` on date fields. Upstream U-13.
+- Owner / next step: user files U-13; offer the wrappers.
+
+### F-098 — Porting exposed page-wide assertions that were vacuous: the header satisfies them
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Medium
+- Task being attempted: porting `ApprovalQueueViewUiTest` and the receipt-preview tests
+  in `ReportDetailViewUiTest`.
+- Expected vs actual: three `ReportDetailViewUiTest` tests asserted
+  `$(Image.class).exists()` for a receipt preview; the `AppHeader` logo always
+  satisfied it, which hid that #172 had replaced row thumbnails with a paperclip chip.
+  In the approval tests, "the submitter's name is shown" read the whole page, where
+  the signed-in admin's name in the header also matches. Not a tool bug: page-wide
+  text and existence checks become true for reasons unrelated to the feature.
+- Workaround used: scope every read to the view, card or dialog it is about; the
+  preview tests now click "Preview receipt: X" and assert the enlarge dialog's
+  `<img alt="X">`.
+- Evidence: `ReportDetailViewUiTest#aSavedImageReceiptRendersAnEnlargeablePreview`,
+  `#anUnsavedImageAttachmentPreviewsOnTheCardBeforeSave`,
+  `#aTripListsItsGeneratedLinesAndAReceiptCanBeAttachedToOne`; approval queue card
+  text helpers.
+- Impact: green tests that test nothing; they survive any port that keeps the
+  page-wide idiom.
+- Suggested Vaadin/product improvement: porting guidance should say "scope reads to
+  the component under test"; a lint for unscoped `exists()` on common tags.
+- Owner / next step: done in the port; worth a line in the testing guidance.
+
+### F-099 — A date-time picker's error messages exist only on the server, so one test stays Browserless-only
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Low
+- Task being attempted: `ReportDetailViewUiTest#travelPickersCarryIncompleteAndBadInputErrorMessages`.
+- Expected vs actual: the test asserts the travel pickers' incomplete/bad-input
+  messages. In the browser the picker's `i18n` property holds only `firstDayOfWeek`,
+  `formatDate` and `parseDate`, so the messages are not observable there until
+  triggered. Triggering them needs typing half a value or garbage into one half of the
+  picker, which Browserless cannot do: `DateTimePickerTester` takes a whole
+  `LocalDateTime`, and the halves are internal components.
+- Workaround used: `@RequiresTestingTool(BROWSERLESS)`, justified in the Javadoc (the
+  only one in the suite, as ADR-0027 §4 requires). The min rule is covered on both
+  tools by `aReturnEqualToTheDepartureIsRefusedAndSaysWhy`. Its sibling for the
+  date picker became a behaviour test instead (types "dsdds", saves, reads the
+  summary).
+- Evidence: `ReportDetailViewUiTest`.
+- Impact: one test of 205 does not run in the browser.
+- Suggested Vaadin/product improvement: a `DateTimePickerTester` method for typing
+  raw text into either half. Part of U-13.
+- Owner / next step: none.
+
+### F-100 — Dropping `browserless-test-spring` compiles and then fails every Browserless view: the adapter wires Spring in only if it is on the classpath
+- Date: 2026-11-10
+- Area: Verification
+- Severity: Medium
+- Task being attempted: removing the direct `browserless-test-spring` dependency once
+  no test extended `SpringBrowserlessTest` (ADR-0027 said it "stays until the last
+  class moves").
+- Expected vs actual: no source imports it and `test-compile` is clean, so it looked
+  unused. The full Browserless run then failed 199 of 583 tests, every one with
+  `Unable to create an instance of 'com.vaadin.expensemanager.base.ui.MainLayout'`:
+  without it, the Unified Browserless adapter instantiates views without Spring, so
+  nothing is injected. `unified-test-browserless` pulls in `browserless-test-junit6`
+  but not the Spring module, and `@UnifiedSpringBootTest` does not complain. The
+  Playwright run was unaffected, which made it look like a Browserless-only flake.
+- Workaround used: keep the dependency, with a comment saying why.
+- Evidence: `pom.xml`; the failing run's surefire reports.
+- Impact: a "clean up unused dependencies" change breaks the default local run with an
+  error that names the app's layout, not the missing module.
+- Suggested Vaadin/product improvement: have `unified-test-spring` (or a Spring
+  flavour of the Browserless adapter) bring `browserless-test-spring`, or fail fast
+  under `@UnifiedSpringBootTest` when it is missing. Upstream U-14.
+- Owner / next step: user files U-14.

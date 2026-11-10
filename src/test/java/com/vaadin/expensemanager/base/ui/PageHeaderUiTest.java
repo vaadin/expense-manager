@@ -1,54 +1,51 @@
 package com.vaadin.expensemanager.base.ui;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
-import com.vaadin.browserless.locator.Locators;
 import com.vaadin.expensemanager.allowance.ui.AllowanceRatesView;
+import com.vaadin.expensemanager.base.AbstractUiTest;
+import com.vaadin.expensemanager.base.ui.unified.ElementSnapshot;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedVerticalLayout;
 import com.vaadin.expensemanager.reference.ui.ExpenseTypeView;
 import com.vaadin.expensemanager.reference.ui.VatRateView;
-import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.Main;
 import com.vaadin.flow.component.html.Paragraph;
-import com.vaadin.flow.component.orderedlayout.ThemableLayout;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedContainer;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
-import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Browserless test (pyramid layer 3, ADR-0012) for the shared {@link PageHeader}
- * block across the three reference routes it opens — {@code /vat-rates},
- * {@code /expense-types} and {@code /allowance-rates} (#184,
- * {@code docs/design/components/page-header.md}).
+ * Unified UI test (pyramid layer 3, ADR-0027 proposed) for the shared
+ * {@link PageHeader} block across the three reference routes it opens —
+ * {@code /vat-rates}, {@code /expense-types} and {@code /allowance-rates} (#184,
+ * {@code docs/design/components/page-header.md}). Runs unchanged on Browserless and
+ * Playwright.
  *
  * <p>The three composed the block themselves and had already drifted apart on
  * the gap below the title, so what this asserts is <strong>sameness</strong>:
  * one {@link PageHeader} per route, the same anatomy inside it, the same two
  * gaps around and within it.
  *
+ * <p>The anatomy is read as elements rather than as Java components: the block is
+ * the {@code vaadin-vertical-layout.page-header}, the view is the one element in the
+ * shell's {@code <main>}, and their order and inline {@code gap} come from
+ * {@link ElementSnapshot} — the Unified API has no portable "direct children in
+ * order". A {@code setSpacing(String)} is an inline {@code gap}, so comparing that
+ * style is the same check as comparing {@code getSpacing()}.
+ *
  * <p><strong>What is deliberately not here.</strong> That the heading renders at
  * 40px, that the intro's 1.6 leading is unitless rather than Aura's inherited
  * 20px length, that the heading's colour survives dark mode, and that the title
  * row wraps at 360px instead of pushing a scrollbar — none of those are
- * decidable from a component tree. They are the visual verification's, and this
+ * decidable on every Testing Tool. They are the visual verification's, and this
  * class stops at the class names and the tokens the two gaps name.
  */
-@SpringBootTest
-@ActiveProfiles("test")
-class PageHeaderUiTest extends SpringBrowserlessTest implements Locators {
-
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
+@WithUserDetails("admin@vaadin.com")
+class PageHeaderUiTest extends AbstractUiTest {
 
     /**
      * The create button's label, from the frame. The {@code h2} beside it carries
@@ -57,21 +54,21 @@ class PageHeaderUiTest extends SpringBrowserlessTest implements Locators {
     private static final String CREATE_LABEL = "New";
 
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void vatRatesOpensWithTheSharedHeaderAndACreateButton() {
-        var view = navigate(VatRateView.class);
+    void vatRatesOpensWithTheSharedHeaderAndACreateButton(UnifiedPage page) {
+        page.navigate(VatRateView.class);
+        screenshot(page, "vat-rates");
 
-        assertHeader("VAT rates", CREATE_LABEL);
-        assertSectionRhythm(view);
+        assertHeader(page, "VAT rates", CREATE_LABEL);
+        assertSectionRhythm(page);
     }
 
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void expenseTypesOpensWithTheSharedHeaderAndACreateButton() {
-        var view = navigate(ExpenseTypeView.class);
+    void expenseTypesOpensWithTheSharedHeaderAndACreateButton(UnifiedPage page) {
+        page.navigate(ExpenseTypeView.class);
+        screenshot(page, "expense-types");
 
-        assertHeader("Expense types", CREATE_LABEL);
-        assertSectionRhythm(view);
+        assertHeader(page, "Expense types", CREATE_LABEL);
+        assertSectionRhythm(page);
     }
 
     /**
@@ -80,12 +77,12 @@ class PageHeaderUiTest extends SpringBrowserlessTest implements Locators {
      * them in the toolbar below. The block is otherwise identical.
      */
     @Test
-    @WithUserDetails("admin@vaadin.com")
-    void allowanceRatesOpensWithTheSameBlockAndNoHeaderAction() {
-        var view = navigate(AllowanceRatesView.class);
+    void allowanceRatesOpensWithTheSameBlockAndNoHeaderAction(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
+        screenshot(page, "allowance-rates");
 
-        assertHeader("Allowance Rates", null);
-        assertSectionRhythm(view);
+        assertHeader(page, "Allowance Rates", null);
+        assertSectionRhythm(page);
     }
 
     // ------------------------------------------------------------- assertions
@@ -95,58 +92,65 @@ class PageHeaderUiTest extends SpringBrowserlessTest implements Locators {
      * @param action the create button's label, or {@code null} when the title row
      *               carries no action at all
      */
-    private void assertHeader(String title, String action) {
+    private void assertHeader(UnifiedPage page, String title, String action) {
         // One block per page: composed by PageHeader, not by the view.
-        var header = find(PageHeader.class).single();
-        assertThat(header.getElement().getClassList()).contains("page-header");
+        var headers = page.find(UnifiedVerticalLayout.class).withClassName("page-header").all();
+        assertThat(headers).hasSize(1);
+        var header = headers.getFirst();
+
+        var anatomy = ElementSnapshot.of(header, 2);
         // The design's 20px between the title row and the intro, through the
         // layout API rather than CSS.
-        assertThat(header.getSpacing()).isEqualTo("var(--em-card-padding)");
+        assertThat(anatomy.gap()).isEqualTo("var(--em-card-padding)");
+        assertThat(anatomy.children()).hasSize(2);
 
-        var parts = header.getChildren().toList();
-        assertThat(parts).hasSize(2);
+        var top = anatomy.child(0);
+        assertThat(top.hasClassName("page-header-top")).isTrue();
 
-        var top = parts.get(0);
-        assertThat(top.getElement().getClassList()).contains("page-header-top");
-
-        var heading = top.getChildren().findFirst().orElseThrow();
-        assertThat(heading).isInstanceOf(H2.class);
-        assertThat(((H2) heading).getText()).isEqualTo(title);
         // The class carries the display size, not the element — the shell owns
         // the page's h1, so a view's own heading is the second level.
-        assertThat(heading.getElement().getClassList()).contains("page-title");
+        var headingElement = top.child(0);
+        assertThat(headingElement.tag()).isEqualTo("h2");
+        assertThat(headingElement.hasClassName("page-title")).isTrue();
+        var heading = header.findComponent(H2.class).withClassName("page-title").single();
+        assertThat(heading.element().getText()).isEqualTo(title);
 
-        var buttons = top.getChildren().filter(Button.class::isInstance)
-                .map(Button.class::cast).toList();
+        var buttons = header.find(UnifiedContainer.class).withClassName("page-header-top")
+                .single().find(UnifiedButton.class).all();
         if (action == null) {
             assertThat(buttons).isEmpty();
         } else {
             assertThat(buttons).singleElement().satisfies(button -> {
                 assertThat(button.getText()).isEqualTo(action);
-                assertThat(button.getThemeNames())
+                assertThat(button.element().getAttribute("theme"))
                         .contains(ButtonVariant.PRIMARY.getVariantName());
             });
         }
 
-        var intro = parts.get(1);
-        assertThat(intro).isInstanceOf(Paragraph.class);
-        assertThat(intro.getElement().getClassList()).contains("page-intro");
+        var intro = anatomy.child(1);
+        assertThat(intro.tag()).isEqualTo("p");
+        assertThat(intro.hasClassName("page-intro")).isTrue();
         // The intro is where the consequences live, so it is never absent.
-        assertThat(((Paragraph) intro).getText()).isNotBlank();
+        assertThat(header.findComponent(Paragraph.class).withClassName("page-intro").single()
+                .element().getText()).isNotBlank();
     }
 
     /**
      * The tab bar, the header block and whatever the view puts below it are
      * siblings one section gap apart — the 40px all three frames draw.
      */
-    private void assertSectionRhythm(Component view) {
-        assertThat(((ThemableLayout) view).getSpacing())
-                .isEqualTo("var(--em-section-gap)");
-        assertThat(view.getChildren().toList())
+    private void assertSectionRhythm(UnifiedPage page) {
+        var content = ElementSnapshot.of(page.findComponent(Main.class).single(), 2);
+        assertThat(content.children()).hasSize(1);
+        var view = content.child(0);
+
+        assertThat(view.gap()).isEqualTo("var(--em-section-gap)");
+        assertThat(view.children())
                 .hasSizeGreaterThan(2)
                 .satisfies(children -> {
-                    assertThat(children.get(0)).isInstanceOf(ReferenceTabs.class);
-                    assertThat(children.get(1)).isInstanceOf(PageHeader.class);
+                    assertThat(children.get(0).tag()).isEqualTo("vaadin-tabs");
+                    assertThat(children.get(0).hasClassName("reference-tabs")).isTrue();
+                    assertThat(children.get(1).hasClassName("page-header")).isTrue();
                 });
     }
 }

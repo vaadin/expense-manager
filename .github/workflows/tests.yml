@@ -12,7 +12,7 @@ concurrency:
 jobs:
   test:
     # One run per Testing Tool (ADR-0027, proposed). Browserless runs the whole
-    # suite; Playwright runs only the Unified UI tests (tag 'unified') in a real
+    # suite; Playwright runs only the Unified UI tests (every *UiTest) in a real
     # Chromium. The Playwright leg does not block PRs while the spike settles.
     name: Maven test (JDK 25, ${{ matrix.tool }})
     runs-on: ubuntu-latest
@@ -25,7 +25,7 @@ jobs:
           - tool: browserless
             args: ''
           - tool: playwright
-            args: -Dgroups=unified -Dvaadin.testing.tool=playwright
+            args: -Dtest='*UiTest' -Dvaadin.testing.tool=playwright
     steps:
       - name: Checkout
         uses: actions/checkout@v4
