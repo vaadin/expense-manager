@@ -3,9 +3,7 @@ package com.vaadin.expensemanager.base.ui;
 import java.util.List;
 
 import com.vaadin.expensemanager.base.AbstractUiTest;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedDiv;
 import com.vaadin.expensemanager.base.ui.unified.UnifiedMenuBar;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedNav;
 import com.vaadin.expensemanager.base.ui.unified.UnifiedVerticalLayout;
 import com.vaadin.expensemanager.reference.ui.VatRateView;
 import com.vaadin.expensemanager.report.ui.MyReportsView;
@@ -16,7 +14,9 @@ import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.sidenav.SideNav;
 import com.vaadin.testing.unified.UnifiedPage;
 import com.vaadin.testing.unified.component.UnifiedContainer;
+import com.vaadin.testing.unified.component.UnifiedDiv;
 import com.vaadin.testing.unified.component.UnifiedGenericComponent;
+import com.vaadin.testing.unified.component.UnifiedNav;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 

@@ -5,12 +5,13 @@ import java.math.BigDecimal;
 import com.vaadin.expensemanager.base.ui.DashboardView;
 import com.vaadin.expensemanager.base.ui.NavGroup;
 import com.vaadin.expensemanager.base.ui.ReferenceTabs;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedTabs;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedElements;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
 import com.vaadin.flow.component.icon.SvgIcon;
 import com.vaadin.testing.unified.UnifiedPage;
 import com.vaadin.testing.unified.component.UnifiedComboBox;
 import com.vaadin.testing.unified.component.UnifiedGrid;
+import com.vaadin.testing.unified.component.UnifiedTabs;
 import com.vaadin.testing.unified.component.UnifiedTextField;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
@@ -116,8 +117,9 @@ class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
     void adminReachesThisRouteThroughTheTabBarRatherThanTheShellMenu(UnifiedPage page) {
         page.navigate(ExpenseTypeView.class);
 
-        assertThat(page.find(UnifiedTabs.class).withClassName("reference-tabs").single()
-                .getSelectedTabText()).isEqualTo("Expense Types");
+        assertThat(UnifiedElements.selectedTabText(
+                page.find(UnifiedTabs.class).withClassName("reference-tabs").single()))
+                .isEqualTo("Expense Types");
         assertThat(navEntryLabels()).doesNotContain("Expense types");
         assertThat(NavGroup.of(ExpenseTypeView.class, "expense-types"))
                 .contains(NavGroup.REFERENCE_TABLES);

@@ -2998,7 +2998,7 @@ Deployment/Observability · UX-spec
   fast on a `@Transactional` `@UnifiedSpringBootTest` browser run, and consider
   shipping a reset extension. Drafted upstream as U-1 in
   `docs/unified-testing-upstream-issues.md`.
-- Owner / next step: user files U-1; ADR-0027 records the snapshot approach.
+- Owner / next step: filed upstream as U-1 = parttio/unified-testing-tool#81; ADR-0027 records the snapshot approach.
 
 ### F-084 — Under `@UnifiedSpringBootTest`, Browserless still finds routes only in the test class's package
 - Date: 2026-11-10
@@ -3019,7 +3019,7 @@ Deployment/Observability · UX-spec
   the browser run passes — and the first thing a new user meets.
 - Suggested Vaadin/product improvement: under Spring, default to the application's
   base package. Upstream U-2.
-- Owner / next step: user files U-2.
+- Owner / next step: filed upstream as U-2 = parttio/unified-testing-tool#82.
 
 ### F-085 — A page-wide lookup misses a button inside a Grid cell on Browserless only
 - Date: 2026-11-10
@@ -3038,7 +3038,7 @@ Deployment/Observability · UX-spec
   not say "this is inside a Grid".
 - Suggested Vaadin/product improvement: include Grid cell components in Browserless
   page-wide queries, or name the cause in the failure. Upstream U-3.
-- Owner / next step: user files U-3.
+- Owner / next step: filed upstream as U-3 = parttio/unified-testing-tool#83.
 
 ### F-086 — `getText()` is `innerText` in a browser and the server string on Browserless, so CSS `text-transform` splits them
 - Date: 2026-11-10
@@ -3057,7 +3057,7 @@ Deployment/Observability · UX-spec
   any `text-transform`, `::before` content or hidden text will diverge the same way.
 - Suggested Vaadin/product improvement: specify which text `getText()` means and make
   both adapters agree (`textContent`, or document the divergence). Upstream U-4.
-- Owner / next step: user files U-4.
+- Owner / next step: filed upstream as U-4 = parttio/unified-testing-tool#84.
 
 ### F-087 — On Playwright, class-name and attribute filters run in Java one element at a time: `UnifiedContainer.withClassName` costs seconds
 - Date: 2026-11-10
@@ -3077,7 +3077,7 @@ Deployment/Observability · UX-spec
   hints why a browser run takes minutes.
 - Suggested Vaadin/product improvement: push class-name, attribute and theme filters
   into the selector (`[class~=…]`, `[attr="…"]`). Upstream U-5.
-- Owner / next step: user files U-5.
+- Owner / next step: filed upstream as U-5 = parttio/unified-testing-tool#85.
 
 ### F-088 — A custom wrapper can't constrain its own browser query, and `findComponent(Component.class)` fails only in a browser
 - Date: 2026-11-10
@@ -3098,7 +3098,7 @@ Deployment/Observability · UX-spec
   costs most, since Browserless is the run developers use locally.
 - Suggested Vaadin/product improvement: a `selector`/default-filter on
   `@UnifiedComponent`; and validate tag-less queries up front on every tool. Upstream U-6.
-- Owner / next step: user files U-6.
+- Owner / next step: filed upstream as U-6 = parttio/unified-testing-tool#86.
 
 ### F-089 — `UnifiedElement.findChildren(tag)` is direct children on Browserless and every descendant, shadow roots included, on Playwright
 - Date: 2026-11-10
@@ -3130,7 +3130,7 @@ Deployment/Observability · UX-spec
 - Suggested Vaadin/product improvement: define it as direct light-DOM children on
   both tools (`:scope > tag` in the browser), skip text nodes on Browserless, and add
   an ordered `children()`. Upstream U-7.
-- Owner / next step: user files U-7.
+- Owner / next step: filed upstream as U-7 = parttio/unified-testing-tool#87.
 
 ### F-090 — A hidden component: Browserless does not find it, a browser does; and Flow does not send its classes or attributes until it is shown
 - Date: 2026-11-10
@@ -3155,7 +3155,7 @@ Deployment/Observability · UX-spec
   the query API does not say whether hidden elements count.
 - Suggested Vaadin/product improvement: make both adapters agree — exclude `hidden`
   by default or offer `.visible()` — and document it. Upstream U-8.
-- Owner / next step: user files U-8.
+- Owner / next step: filed upstream as U-8 = parttio/unified-testing-tool#88.
 
 ### F-091 — Dev-mode tooling leaves closed `<vaadin-dialog>`s in the page, so `find(UnifiedDialog.class).single()` fails in a browser only
 - Date: 2026-11-10
@@ -3173,7 +3173,7 @@ Deployment/Observability · UX-spec
   runs browser tests in dev mode meets it.
 - Suggested Vaadin/product improvement: match only open dialogs by default (or an
   `opened()` filter on `DialogQuery`), and ignore dev-tools elements. Upstream U-9.
-- Owner / next step: user files U-9.
+- Owner / next step: filed upstream as U-9 = parttio/unified-testing-tool#89.
 
 ### F-092 — `withAccessibleName` misses a field named with `setAriaLabel` on Browserless only
 - Date: 2026-11-10
@@ -3197,7 +3197,7 @@ Deployment/Observability · UX-spec
   names this way.
 - Suggested Vaadin/product improvement: Browserless should consult the
   `accessibleName` property. Upstream U-10.
-- Owner / next step: user files U-10.
+- Owner / next step: filed upstream as U-10 = parttio/unified-testing-tool#90.
 
 ### F-093 — On Playwright `isAt` does not see a client-side navigation finish, and cannot assert a view with no route
 - Date: 2026-11-10
@@ -3222,7 +3222,7 @@ Deployment/Observability · UX-spec
 - Suggested Vaadin/product improvement: read `location` through `evaluate` in
   `isAt`/`hasPath` (or ping the page in `sync()`); match error views by class.
   Upstream U-11.
-- Owner / next step: user files U-11.
+- Owner / next step: filed upstream as U-11 = parttio/unified-testing-tool#91.
 
 ### F-094 — Browserless never routes an uncaught listener exception to the session's `ErrorHandler`, so error-handling flows diverge by design
 - Date: 2026-11-10
@@ -3244,7 +3244,7 @@ Deployment/Observability · UX-spec
   portably.
 - Suggested Vaadin/product improvement: an opt-in Browserless adapter setting
   "route uncaught exceptions to the session error handler". Upstream U-12.
-- Owner / next step: user files U-12.
+- Owner / next step: filed upstream as U-12 = parttio/unified-testing-tool#92.
 
 ### F-095 — Text and inline style read differently per tool beyond `text-transform`
 - Date: 2026-11-10
@@ -3268,7 +3268,7 @@ Deployment/Observability · UX-spec
   promises away.
 - Suggested Vaadin/product improvement: specify `getText()` per tool (as U-4) and add
   a portable `getInlineStyle(name)`. Folded into U-4.
-- Owner / next step: user extends U-4.
+- Owner / next step: folded into U-4 = parttio/unified-testing-tool#84.
 
 ### F-096 — On Playwright lazy wrappers re-resolve their chain on every read, which multiplies F-087's cost and races a closing dialog
 - Date: 2026-11-10
@@ -3291,7 +3291,7 @@ Deployment/Observability · UX-spec
 - Suggested Vaadin/product improvement: U-5 (push class/attribute filters into the
   selector) fixes both; meanwhile cache a resolved element for one assertion and skip
   detached candidates. Folded into U-5.
-- Owner / next step: user extends U-5.
+- Owner / next step: folded into U-5 = parttio/unified-testing-tool#85.
 
 ### F-097 — A Flow app needs a dozen project wrappers before its tests can be ported
 - Date: 2026-11-10
@@ -3314,7 +3314,7 @@ Deployment/Observability · UX-spec
 - Suggested Vaadin/product improvement: add `MenuBar`, `Upload`, `TextArea`,
   `BigDecimalField`, `IntegerField`, `DateTimePicker`, `Tabs`, `Details` and generic
   tag Scopes to the Core Set; a raw `typeText` on date fields. Upstream U-13.
-- Owner / next step: user files U-13; offer the wrappers.
+- Owner / next step: filed upstream as U-13 = parttio/unified-testing-tool#93; offer the wrappers.
 
 ### F-098 — Porting exposed page-wide assertions that were vacuous: the header satisfies them
 - Date: 2026-11-10
@@ -3384,4 +3384,4 @@ Deployment/Observability · UX-spec
 - Suggested Vaadin/product improvement: have `unified-test-spring` (or a Spring
   flavour of the Browserless adapter) bring `browserless-test-spring`, or fail fast
   under `@UnifiedSpringBootTest` when it is missing. Upstream U-14.
-- Owner / next step: user files U-14.
+- Owner / next step: filed upstream as U-14 = parttio/unified-testing-tool#94.

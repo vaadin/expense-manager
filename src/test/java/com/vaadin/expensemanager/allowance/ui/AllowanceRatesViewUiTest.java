@@ -8,26 +8,28 @@ import com.vaadin.expensemanager.allowance.AllowanceRateService;
 import com.vaadin.expensemanager.base.AbstractUiTest;
 import com.vaadin.expensemanager.base.ui.DashboardView;
 import com.vaadin.expensemanager.base.ui.ReferenceTabs;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedBigDecimalField;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedDiv;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedIntegerField;
+import com.vaadin.expensemanager.base.ui.unified.UnifiedElements;
 import com.vaadin.expensemanager.base.ui.unified.UnifiedMenuBar;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedTabs;
 import com.vaadin.expensemanager.reference.ui.ExpenseTypeView;
 import com.vaadin.expensemanager.reference.ui.VatRateView;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.router.RouterLink;
 import com.vaadin.flow.spring.security.AuthenticationContext;
 import com.vaadin.testing.unified.Scope;
 import com.vaadin.testing.unified.UnifiedPage;
 import com.vaadin.testing.unified.UnifiedWrapper;
+import com.vaadin.testing.unified.component.UnifiedBigDecimalField;
 import com.vaadin.testing.unified.component.UnifiedButton;
 import com.vaadin.testing.unified.component.UnifiedComboBox;
+import com.vaadin.testing.unified.component.UnifiedDiv;
 import com.vaadin.testing.unified.component.UnifiedGenericComponent;
 import com.vaadin.testing.unified.component.UnifiedGrid;
+import com.vaadin.testing.unified.component.UnifiedIntegerField;
+import com.vaadin.testing.unified.component.UnifiedTabs;
 import com.vaadin.testing.unified.component.UnifiedTextField;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -135,7 +137,7 @@ class AllowanceRatesViewUiTest extends AbstractUiTest {
     void theCurrentRoutesTabIsSelectedAndItsLinkIsAriaCurrent(UnifiedPage page) {
         page.navigate(AllowanceRatesView.class);
 
-        assertThat(tabs(page).getSelectedTabText()).isEqualTo("Allowance Rates");
+        assertThat(UnifiedElements.selectedTabText(tabs(page))).isEqualTo("Allowance Rates");
         // aria-current is the half a screen reader reads; the selected pill is the
         // sighted half of the same fact, and it goes on the LINK, not the Tab.
         assertThat(tabLinks(page).stream()
@@ -171,10 +173,10 @@ class AllowanceRatesViewUiTest extends AbstractUiTest {
     @WithUserDetails(ADMIN_EMAIL)
     void theOtherTwoReferenceViewsHostTheSameBarWithTheirOwnTabSelected(UnifiedPage page) {
         page.navigate(VatRateView.class);
-        assertThat(tabs(page).getSelectedTabText()).isEqualTo("VAT Rates");
+        assertThat(UnifiedElements.selectedTabText(tabs(page))).isEqualTo("VAT Rates");
 
         page.navigate(ExpenseTypeView.class);
-        assertThat(tabs(page).getSelectedTabText()).isEqualTo("Expense Types");
+        assertThat(UnifiedElements.selectedTabText(tabs(page))).isEqualTo("Expense Types");
     }
 
     // ----------------------------------------------------------- the toolbar
@@ -452,9 +454,13 @@ class AllowanceRatesViewUiTest extends AbstractUiTest {
         return page.find(UnifiedTabs.class).withClassName("reference-tabs").single();
     }
 
-    /** The links inside the tab bar, in bar order. */
+    /**
+     * The links inside the tab bar, in bar order. The Core Set's UnifiedTabs is not a
+     * Scope, so the bar is found as a generic component, which is.
+     */
     private static List<UnifiedGenericComponent> tabLinks(UnifiedPage page) {
-        return tabs(page).findComponent(RouterLink.class).all();
+        return page.findComponent(Tabs.class).withClassName("reference-tabs").single()
+                .findComponent(RouterLink.class).all();
     }
 
     private static UnifiedDiv rateCard(UnifiedPage page) {

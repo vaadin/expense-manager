@@ -50,10 +50,23 @@ run without writing a second suite.
 5. **Components missing from the Core Set get project wrappers** under
    `src/test/java/.../base/ui/unified/`. Each wrapper defines its methods on the
    portable Unified Element and uses per-tool overrides only where the browser and
-   the server differ (`UnifiedDetails` uses `DetailsTester` on Browserless;
-   `UnifiedMenuBar`, `UnifiedUpload`, `UnifiedDateTimePicker` and
-   `UnifiedErrorHandlingButton` likewise). Porting the suite took about a dozen
-   (F-097); they are generic, so they can go upstream.
+   the server differ. Porting the suite took about a dozen (F-097). From
+   0.1.0-alpha2 the Core Set covers most of them (TextArea, IntegerField,
+   BigDecimalField, DateTimePicker, Tabs, Details, Div, Span, Nav, and
+   `UnifiedDatePicker.typeText`), so those project wrappers were removed. Three
+   stay:
+   - `UnifiedMenuBar`: the Core Set's addresses items only by text, this app's
+     menu triggers are icon-only (an `aria-label` and no text), and it cannot read
+     an item's enabled state (parttio/unified-testing-tool#108).
+   - `UnifiedUpload`: the Core upload on Playwright waits for the file list to
+     complete, and this app clears the list once the file is handled. The project
+     wrapper uses the Core adapter SPI on Browserless and Selenium and waits for
+     the upload's POST on Playwright (parttio/unified-testing-tool#122).
+   - The layout, FormLayout, metric-card and error-handling-button wrappers, which
+     the Core Set has no equivalent for.
+   The Core `UnifiedTabs` names a tab by `Tab#getLabel()` on Browserless, empty for
+   a tab wrapping a `RouterLink`; `UnifiedElements.selectedTabText` reads it
+   portably meanwhile (parttio/unified-testing-tool#107).
 6. **Production code may gain role class names or test ids** where a test has no
    label or accessible name to find an element by. Accessible names come first,
    because ADR-0020 wants them anyway. So far the only addition is the

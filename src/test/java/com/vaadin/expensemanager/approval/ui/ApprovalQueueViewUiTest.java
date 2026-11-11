@@ -3,13 +3,13 @@ package com.vaadin.expensemanager.approval.ui;
 import java.time.LocalDate;
 
 import com.vaadin.expensemanager.base.ui.ErrorSummary;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedTextArea;
 import com.vaadin.expensemanager.report.domain.ReportStatus;
 import com.vaadin.expensemanager.report.ui.ReportDetailView;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
 import com.vaadin.testing.unified.UnifiedPage;
 import com.vaadin.testing.unified.component.UnifiedButton;
 import com.vaadin.testing.unified.component.UnifiedDialog;
+import com.vaadin.testing.unified.component.UnifiedTextArea;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 

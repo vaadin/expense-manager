@@ -14,9 +14,15 @@ import com.vaadin.testing.unified.UnifiedWrapper;
 import com.vaadin.testing.unified.query.Query;
 
 /**
- * Project-owned Unified wrapper for {@link MenuBar} — not in the Unified API's Core
- * Set; the app's {@code RowActionMenu} is one (ADR-0027, proposed). Generic: nothing
- * here knows about row actions.
+ * Project-owned Unified wrapper for {@link MenuBar}; the app's {@code RowActionMenu}
+ * is one (ADR-0027, proposed). Generic: nothing here knows about row actions.
+ *
+ * <p>Kept although 0.1.0-alpha2 adds a Core Set
+ * {@link com.vaadin.testing.unified.component.UnifiedMenuBar}: that one addresses
+ * every item by its text, and this app's triggers (the row "⋮" and the account
+ * avatar) are icon-only, named by {@code aria-label} alone. It also cannot read an
+ * item's enabled state, which the account menu's disabled user-name item needs.
+ * Upstream: parttio/unified-testing-tool#108.
  *
  * <p>Root items are addressed by index, sub-menu items by the text the user reads:
  * a root item can be icon-only, so it may have no text to match.
@@ -56,7 +62,7 @@ public interface UnifiedMenuBar extends UnifiedWrapper, Findable<UnifiedMenuBar.
         if (own != null && !own.isBlank()) {
             return own;
         }
-        for (UnifiedElement item : button.findChildren("vaadin-menu-bar-item")) {
+        for (UnifiedElement item : button.findDescendants("vaadin-menu-bar-item")) {
             String label = item.getAttribute("aria-label");
             if (label != null && !label.isBlank()) {
                 return label;
@@ -125,7 +131,7 @@ public interface UnifiedMenuBar extends UnifiedWrapper, Findable<UnifiedMenuBar.
         while (true) {
             // Only the open sub-menu renders a list box, and it renders it in the
             // menu bar's light DOM (Vaadin 25), so it is inside this scope.
-            List<UnifiedElement> items = menu.element().findChildren("vaadin-menu-bar-list-box")
+            List<UnifiedElement> items = menu.element().findDescendants("vaadin-menu-bar-list-box")
                     .stream()
                     .filter(UnifiedElement::isVisible)
                     .flatMap(box -> box.findChildren("vaadin-menu-bar-item").stream())

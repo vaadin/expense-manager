@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Objects;
 
 import com.vaadin.expensemanager.base.ui.LucideIcon;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedDetails;
 import com.vaadin.expensemanager.base.ui.unified.UnifiedMetricCard;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
 import com.vaadin.flow.component.html.Anchor;
@@ -17,6 +16,7 @@ import com.vaadin.testing.unified.UnifiedPage;
 import com.vaadin.testing.unified.component.UnifiedButton;
 import com.vaadin.testing.unified.component.UnifiedComboBox;
 import com.vaadin.testing.unified.component.UnifiedContainer;
+import com.vaadin.testing.unified.component.UnifiedDetails;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 

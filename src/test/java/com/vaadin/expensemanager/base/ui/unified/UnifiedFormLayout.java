@@ -56,7 +56,7 @@ public interface UnifiedFormLayout extends UnifiedWrapper, Scope,
 
     /** The layout's direct children, in order. */
     default List<UnifiedElement> getChildren() {
-        return UnifiedElements.children(element());
+        return element().children();
     }
 
     /** How many columns a child spans: its {@code colspan} attribute, 1 when unset. */

@@ -3,8 +3,8 @@ package com.vaadin.expensemanager.reference.ui;
 import java.math.BigDecimal;
 
 import com.vaadin.expensemanager.base.ui.ErrorSummary;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedBigDecimalField;
 import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.component.UnifiedBigDecimalField;
 import com.vaadin.testing.unified.component.UnifiedButton;
 import com.vaadin.testing.unified.component.UnifiedDialog;
 import org.junit.jupiter.api.Test;
@@ -28,8 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * reorder swaps neighbours with boundary buttons disabled, and the active-toggle
  * retains the row as inactive (ADR-0018, never deletes).
  *
- * <p>The rate field is a {@code BigDecimalField}, outside the Core Set, so it is
- * driven through the project's {@link UnifiedBigDecimalField}.
+ * <p>The rate field is a {@code BigDecimalField}, driven through the Core Set's
+ * {@link UnifiedBigDecimalField} (since 0.1.0-alpha2).
  */
 class ReferenceConfigViewUiTest extends AbstractReferenceDataViewUiTest {
 

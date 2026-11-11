@@ -1,32 +1,36 @@
 # Unified testing tool: draft upstream issues
 
-These are drafts for [parttio/unified-testing-tool](https://github.com/parttio/unified-testing-tool),
+These were drafted for [parttio/unified-testing-tool](https://github.com/parttio/unified-testing-tool) and are now filed there (2026-11-10; the Status column links each issue),
 found while porting this app's UI tests to `0.1.0-alpha1` (ADR-0027, proposed). They
 are written to be pasted as issues and filed by a person. Each one links back to its
 finding in `docs/findings.md`.
 
-The tool's README links its tracker as `jcgueriaud1/unified-testing-tool`, so file
-them wherever its issues actually live.
+`jcgueriaud1/unified-testing-tool` redirects to `parttio/unified-testing-tool`.
 
 Context for every issue: Spring Boot 4.1.1, Vaadin 25.3.5, Java 25, Postgres
 (Testcontainers), `@UnifiedSpringBootTest`, and the Browserless and Playwright adapters.
 
 | # | Title | Finding | Status |
 |---|---|---|---|
-| U-1 | `@Transactional` rollback silently differs between Browserless and browser tools | F-083 | draft |
-| U-2 | Browserless under Spring only finds routes in the test class's package | F-084 | draft |
-| U-3 | Page-wide find misses Grid cell components on Browserless | F-085 | draft |
-| U-4 | `getText()` means different text per tool (`innerText` vs server string) | F-086 | draft |
-| U-5 | Playwright: class/attribute/theme filters are evaluated per element in Java | F-087 | draft |
-| U-6 | Custom wrappers can't carry a default filter; tag-less `findComponent` fails only in a browser | F-088 | draft |
-| U-7 | `findChildren(tag)` is direct children on Browserless, all descendants (shadow DOM too) on Playwright | F-089 | draft |
-| U-8 | Hidden elements: Browserless excludes them, a browser query includes them | F-090 | draft |
-| U-9 | Closed dialogs (incl. dev tools') match `UnifiedDialog` in a browser | F-091 | draft |
-| U-10 | Browserless `withAccessibleName` ignores the `accessibleName` property (`setAriaLabel`) | F-092 | draft |
-| U-11 | Playwright `isAt` misses client-side navigation; can't assert route-less error views | F-093 | draft |
-| U-12 | Browserless doesn't route uncaught listener exceptions to the session `ErrorHandler` | F-094 | draft |
-| U-13 | Core Set gaps: MenuBar, Upload, TextArea, BigDecimal/IntegerField, DateTimePicker, Tabs, tag Scopes | F-097, F-099 | draft |
-| U-14 | `@UnifiedSpringBootTest` on Browserless silently needs `browserless-test-spring` at runtime | F-100 | draft |
+| U-1 | `@Transactional` rollback silently differs between Browserless and browser tools | F-083 | [#81](https://github.com/parttio/unified-testing-tool/issues/81) |
+| U-2 | Browserless under Spring only finds routes in the test class's package | F-084 | [#82](https://github.com/parttio/unified-testing-tool/issues/82) |
+| U-3 | Page-wide find misses Grid cell components on Browserless | F-085 | [#83](https://github.com/parttio/unified-testing-tool/issues/83) |
+| U-4 | `getText()` means different text per tool (`innerText` vs server string) | F-086 | [#84](https://github.com/parttio/unified-testing-tool/issues/84) |
+| U-5 | Playwright: class/attribute/theme filters are evaluated per element in Java | F-087 | [#85](https://github.com/parttio/unified-testing-tool/issues/85) |
+| U-6 | Custom wrappers can't carry a default filter; tag-less `findComponent` fails only in a browser | F-088 | [#86](https://github.com/parttio/unified-testing-tool/issues/86) |
+| U-7 | `findChildren(tag)` is direct children on Browserless, all descendants (shadow DOM too) on Playwright | F-089 | [#87](https://github.com/parttio/unified-testing-tool/issues/87) |
+| U-8 | Hidden elements: Browserless excludes them, a browser query includes them | F-090 | [#88](https://github.com/parttio/unified-testing-tool/issues/88) |
+| U-9 | Closed dialogs (incl. dev tools') match `UnifiedDialog` in a browser | F-091 | [#89](https://github.com/parttio/unified-testing-tool/issues/89) |
+| U-10 | Browserless `withAccessibleName` ignores the `accessibleName` property (`setAriaLabel`) | F-092 | [#90](https://github.com/parttio/unified-testing-tool/issues/90) |
+| U-11 | Playwright `isAt` misses client-side navigation; can't assert route-less error views | F-093 | [#91](https://github.com/parttio/unified-testing-tool/issues/91) |
+| U-12 | Browserless doesn't route uncaught listener exceptions to the session `ErrorHandler` | F-094 | [#92](https://github.com/parttio/unified-testing-tool/issues/92) |
+| U-13 | Core Set gaps: MenuBar, Upload, TextArea, BigDecimal/IntegerField, DateTimePicker, Tabs, tag Scopes | F-097, F-099 | [#93](https://github.com/parttio/unified-testing-tool/issues/93) |
+| U-14 | `@UnifiedSpringBootTest` on Browserless silently needs `browserless-test-spring` at runtime | F-100 | [#94](https://github.com/parttio/unified-testing-tool/issues/94) |
+| U-15 | Selenium adapter: `StaleElementReferenceException` when Vaadin re-renders during a filtered find | benchmark S7 | [#95](https://github.com/parttio/unified-testing-tool/issues/95) |
+| U-16 | Selenium adapter: a new browser for every test (+0.6 s per test vs Playwright) | benchmark | [#96](https://github.com/parttio/unified-testing-tool/issues/96) |
+| U-17 | Core `UnifiedTabs` names a tab by `getLabel()` only on Browserless (empty for a `RouterLink` tab) | alpha2 Core Set | [#107](https://github.com/parttio/unified-testing-tool/issues/107) |
+| U-18 | Core `UnifiedMenuBar`: no aria-label item lookup, no enabled state | alpha2 Core Set | [#108](https://github.com/parttio/unified-testing-tool/issues/108) |
+| U-19 | Core Playwright `upload()` times out when the app clears the file list | alpha2 Core Set | [#122](https://github.com/parttio/unified-testing-tool/issues/122) |
 
 ---
 

@@ -1,13 +1,11 @@
 package com.vaadin.expensemanager.base.ui.unified;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.vaadin.flow.component.Component;
 import com.vaadin.testing.unified.UnifiedElement;
+import com.vaadin.testing.unified.component.UnifiedTabs;
 
 /**
  * Reads on a Unified Element that the Unified API does not offer but every Testing Tool
@@ -16,47 +14,6 @@ import com.vaadin.testing.unified.UnifiedElement;
 public final class UnifiedElements {
 
     private UnifiedElements() {}
-
-    /**
-     * The element's direct children, in document order.
-     *
-     * <p>{@link UnifiedElement#findChildren} means different things per tool: the
-     * element's direct children of one tag on Browserless, every <em>descendant</em>
-     * matching a selector in a browser. So a browser asks for {@code xpath=./*} — not
-     * {@code :scope > *}, which Playwright's CSS engine lets pierce into the element's
-     * shadow root, adding e.g. a form layout's internal {@code <div id="layout">},
-     * and Browserless — recognised by being able to hand over the server-side component
-     * — asks once per child tag and keeps the order the component tree gives. Text
-     * nodes are not children here, as in a browser's {@code ./*}; an element
-     * mixing text and elements can't be listed on Browserless (its {@code findChildren}
-     * fails on the text node), which this reports rather than crashes on.
-     */
-    public static List<UnifiedElement> children(UnifiedElement element) {
-        var component = element.tryUnwrap(Component.class);
-        if (component.isEmpty()) {
-            return element.findChildren("xpath=./*");
-        }
-        var server = component.get().getElement();
-        if (server.getChildren().anyMatch(child -> child.isTextNode())
-                && server.getChildren().anyMatch(child -> !child.isTextNode())) {
-            // Browserless's findChildren calls getTag() on every child, and a text
-            // node's throws UnsupportedOperationException (alpha1).
-            throw new IllegalStateException("Can't list the children of <"
-                    + server.getTag() + ">: it mixes text and elements, which the"
-                    + " Browserless adapter's findChildren cannot walk");
-        }
-        List<UnifiedElement> ordered = new ArrayList<>();
-        Map<String, List<UnifiedElement>> byTag = new HashMap<>();
-        Map<String, Integer> used = new HashMap<>();
-        component.get().getElement().getChildren().filter(child -> !child.isTextNode())
-                .forEach(child -> {
-            String tag = child.getTag();
-            var sameTag = byTag.computeIfAbsent(tag, element::findChildren);
-            int index = used.merge(tag, 1, Integer::sum) - 1;
-            ordered.add(sameTag.get(index));
-        });
-        return ordered;
-    }
 
     /**
      * The inline style the server set, as {@code property -> value}. Both tools expose it
@@ -77,6 +34,23 @@ public final class UnifiedElements {
             }
         }
         return style;
+    }
+
+    /**
+     * The text of the selected tab, or {@code null} when none is.
+     *
+     * <p>Not {@link UnifiedTabs#getSelectedTab()}: on Browserless (0.1.0-alpha2) that
+     * reads {@code Tab#getLabel()}, which is empty for a tab that wraps a component,
+     * as every tab of the app's {@code ReferenceTabs} wraps a {@code RouterLink}. The
+     * bar's {@code selected} index and the tabs' text read the same on every tool.
+     * Upstream: parttio/unified-testing-tool#107.
+     */
+    public static String selectedTabText(UnifiedTabs tabs) {
+        Integer selected = tabs.element().getPropertyInteger("selected");
+        if (selected == null || selected < 0) {
+            return null;
+        }
+        return tabs.element().findChildren("vaadin-tab").get(selected).getText();
     }
 
     /** Whether the {@code class} attribute carries {@code className}. */

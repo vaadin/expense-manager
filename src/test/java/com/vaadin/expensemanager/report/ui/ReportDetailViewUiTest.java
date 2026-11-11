@@ -8,17 +8,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import com.vaadin.expensemanager.base.ui.LucideIcon;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedBigDecimalField;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedDatePickerInput;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedDateTimePicker;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedDiv;
 import com.vaadin.expensemanager.base.ui.unified.UnifiedElements;
 import com.vaadin.expensemanager.base.ui.unified.UnifiedFormLayout;
 import com.vaadin.expensemanager.base.ui.unified.UnifiedHorizontalLayout;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedIntegerField;
 import com.vaadin.expensemanager.base.ui.unified.UnifiedMenuBar;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedSpan;
-import com.vaadin.expensemanager.base.ui.unified.UnifiedTextArea;
 import com.vaadin.expensemanager.base.ui.unified.UnifiedUpload;
 import com.vaadin.expensemanager.reference.ReferenceDataService;
 import com.vaadin.expensemanager.report.domain.GeneratedLineKind;
@@ -33,18 +26,25 @@ import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.Image;
 import com.vaadin.flow.component.icon.SvgIcon;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.testing.unified.RequiresTestingTool;
 import com.vaadin.testing.unified.Scope;
 import com.vaadin.testing.unified.TestingTool;
 import com.vaadin.testing.unified.UnifiedElement;
 import com.vaadin.testing.unified.UnifiedPage;
 import com.vaadin.testing.unified.UnifiedWrapper;
+import com.vaadin.testing.unified.component.UnifiedBigDecimalField;
 import com.vaadin.testing.unified.component.UnifiedButton;
 import com.vaadin.testing.unified.component.UnifiedCheckbox;
 import com.vaadin.testing.unified.component.UnifiedComboBox;
 import com.vaadin.testing.unified.component.UnifiedDatePicker;
+import com.vaadin.testing.unified.component.UnifiedDateTimePicker;
 import com.vaadin.testing.unified.component.UnifiedDialog;
+import com.vaadin.testing.unified.component.UnifiedDiv;
+import com.vaadin.testing.unified.component.UnifiedIntegerField;
 import com.vaadin.testing.unified.component.UnifiedRadioButtonGroup;
+import com.vaadin.testing.unified.component.UnifiedSpan;
+import com.vaadin.testing.unified.component.UnifiedTextArea;
 import com.vaadin.testing.unified.component.UnifiedTextField;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -134,7 +134,7 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
         // garbage and checks the message the summary actually carries.
         page.navigate(ReportDetailView.class);
 
-        page.find(UnifiedDatePickerInput.class).withLabel("Report date").single()
+        page.find(UnifiedDatePicker.class).withLabel("Report date").single()
                 .typeText("dsdds");
         click(page, "Save");
         screenshot(page, "bad-input-summary");
@@ -269,8 +269,8 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
         clickNamed(page, "Add expense");
 
         var comment = textArea(page, "Comment");
-        assertThat(comment.getMinRows()).isEqualTo(2);
-        assertThat(comment.getMaxLength()).isEqualTo(500);
+        assertThat(comment.element().getPropertyInteger("minRows")).isEqualTo(2);
+        assertThat(comment.element().getPropertyInteger("maxlength")).isEqualTo(500);
 
         assertThat(bigDecimalField(page, "Unit price").getHelperText())
                 .isEqualTo("Gross, each");
@@ -308,11 +308,12 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
         page.navigate(ReportDetailView.class);
         clickNamed(page, "Add expense");
 
-        var upload = upload(page);
+        // As a generic component: the Core Set's UnifiedUpload is not a Scope.
+        var upload = page.findComponent(Upload.class).single();
         var button = upload.find(UnifiedButton.class).single();
         assertThat(button.getText()).isEqualTo("Upload receipt…");
         // Plain text: the label's Text node and nothing else — no icon child.
-        assertThat(UnifiedElements.children(button.element())).isEmpty();
+        assertThat(button.element().children()).isEmpty();
         // The upload's one Lucide icon sits in the drop-label-icon slot.
         var icons = upload.findComponent(SvgIcon.class).all().stream()
                 .filter(icon -> icon.element().getProperty("symbol") != null).toList();
@@ -1225,7 +1226,9 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
 
         clickRowAction(page, "Per diem allowance (full day)", "Override");
 
-        assertThat(integerField(page, "Count").getMin()).isEqualTo(0);
+        // min may come back as "0" or "0.0" depending on the tool: compare it as a number.
+        assertThat(Double.parseDouble(integerField(page, "Count").element().getProperty("min")))
+                .isEqualTo(0.0);
     }
 
     @Test
@@ -1769,11 +1772,14 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
      * which avoids walking a tree each tool exposes differently.
      */
     private static UnifiedDialog openDialogSaying(UnifiedPage page, String marker) {
+        page.waitUntil(() -> openDialogs(page).stream()
+                .anyMatch(dialog -> dialogText(dialog).contains(marker)));
         return openDialogs(page).stream()
                 .filter(dialog -> dialogText(dialog).contains(marker))
                 .min(Comparator.comparingInt(dialog -> dialogText(dialog).length()))
                 .orElseThrow(() -> new AssertionError(
-                        "No open dialog says \"" + marker + "\""));
+                        "No open dialog says \"" + marker + "\"; open dialogs say: "
+                        + openDialogs(page).stream().map(ReportDetailViewUiTest::dialogText).toList()));
     }
 
     /** Re-costs the open report's only trip by moving its return time. */
@@ -1997,7 +2003,7 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
         // Label and figure are separate spans in the totals card's classes; Trip
         // total is the LAST row, and the block paints no surface of its own.
         var totals = children.get(14);
-        var rows = UnifiedElements.children(totals);
+        var rows = totals.children();
         // Whitespace dropped: a browser's text puts a line break between the spans.
         assertThat(rows.getLast().getText().replaceAll("\\s+", ""))
                 .isEqualTo("Triptotal€54.00");
@@ -2097,8 +2103,8 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
         // bound still offers the same instant on both sides (issue #140).
         var ret = dateTimePicker(page, "Return");
         var dep = dateTimePicker(page, "Departure");
-        assertThat(ret.getMin()).isEqualTo(DEP.plusMinutes(15));
-        assertThat(dep.getMax()).isEqualTo(DEP.plusHours(11).minusMinutes(15));
+        assertThat(dateTimeProperty(ret, "min")).isEqualTo(DEP.plusMinutes(15));
+        assertThat(dateTimeProperty(dep, "max")).isEqualTo(DEP.plusHours(11).minusMinutes(15));
     }
 
     @Test
@@ -2119,7 +2125,9 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
         textField(page, "Destinations").setValue("Helsinki");
         textField(page, "Travel purpose").setValue("Client visit");
 
-        dateTimePicker(page, "Return").typeOutOfRange(DEP);
+        var returnPicker = dateTimePicker(page, "Return");
+        returnPicker.element().tryUnwrap(DateTimePicker.class).ifPresentOrElse(
+                picker -> picker.setValue(DEP), () -> returnPicker.setValue(DEP));
 
         saveDialog(page);
         screenshot(page, "range-rule-summary");
@@ -2268,7 +2276,7 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
         // A fresh draft has no trip and no line, so both cards are absent while both
         // headings and their Add actions stand.
         assertThat(page.find(UnifiedDiv.class).withClassName("expense-item-card")
-                .exists()).isFalse();
+                .visible().exists()).isFalse();
         assertThat(hasSpan(page, "Travel info")).isTrue();
         assertThat(hasSpan(page, "Expenses")).isTrue();
         assertThat(hasNamed(page, "Add travel")).isTrue();
@@ -2470,7 +2478,7 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
         // One box holding every entry, not one bordered box per entry, under the same
         // uppercase .section-label role the other two section headings use.
         var box = page.find(UnifiedDiv.class).withClassName("status-history-box").single();
-        assertThat(UnifiedElements.children(box.element())).hasSize(2); // Submitted, Rejected
+        assertThat(box.element().children()).hasSize(2); // Submitted, Rejected
         assertThat(page.find(UnifiedSpan.class)
                 .where(span -> "Status history".equals(rawText(span))).single().element())
                 .satisfies(heading -> assertThat(UnifiedElements.classNames(heading))
@@ -2504,7 +2512,7 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
 
     /** The .expense-row children of one section card, in order. */
     private static List<UnifiedElement> rowsIn(UnifiedDiv card) {
-        return UnifiedElements.children(card.element()).stream()
+        return card.element().children().stream()
                 .filter(child -> UnifiedElements.hasClassName(child, "expense-row"))
                 .toList();
     }
@@ -2675,6 +2683,12 @@ class ReportDetailViewUiTest extends AbstractReportUiTest {
 
     private static UnifiedDateTimePicker dateTimePicker(UnifiedPage page, String label) {
         return page.find(UnifiedDateTimePicker.class).withLabel(label).single();
+    }
+
+    /** The picker's {@code min} / {@code max}: the Core Set wrapper has no getter for them. */
+    private static LocalDateTime dateTimeProperty(UnifiedDateTimePicker picker, String name) {
+        String value = picker.element().getProperty(name);
+        return value == null || value.isBlank() || "null".equals(value) ? null : LocalDateTime.parse(value);
     }
 
     private static UnifiedCheckbox checkbox(UnifiedPage page, String label) {
