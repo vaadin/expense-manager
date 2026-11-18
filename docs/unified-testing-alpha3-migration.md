@@ -193,6 +193,7 @@ for the markers, so for each class the table separates **markers** from **unmark
 |---|---:|---:|---:|---:|---:|---:|---|---|---|
 | DashboardViewUiTest | 3 | 3 | 0 | 0 | 0 | 1 | 3/3 | **3/3** | `@RequiresTestingTool` removed from all 3 tests. `UnifiedMenuBar` used despite the marker (R4). `findComponent(H2.class)` for the greeting, since there is no heading Wrapper |
 | UserManagementViewUiTest | 3 | 3 | 0 | ~31 | 0 | 1 | 10/10 | **10/10** | Class-level `@Transactional` and `@RequiresTestingTool` removed, along with `implements Locators`. An `@AfterEach` restores the seeded users. `GridLocator` column scans became `row().withCellText("Email", ..)` with retrying `hasCellText`. The denied route is now "see H2 'Page not found', see no grid" instead of "navigate throws". The two nav-entry tests needed nothing: they read the nav model on the test thread, which works on any tool |
+| PageHeaderUiTest | 4 | 4 | 0 | 1 (`implements Locators`) | 2 | 1 | 3/3 | **3/3** | Wrote `UnifiedPageHeader` (`tag = "vaadin-vertical-layout", selector = ".page-header"`) and `UnifiedVerticalLayout`, in `base/ui`. The `PageHeader` component reference became a Wrapper. `getSpacing()` became `getInlineStyle("gap")`, which is portable because `setSpacing(String)` writes the inline `gap`. The `instanceof` child-order check became child class names. The view's section rhythm is found with `where(..)` on a vertical layout whose first children are the tabs and the header |
 
 **Skill and API observations**
 

@@ -1,19 +1,17 @@
 package com.vaadin.expensemanager.base.ui;
 
-import com.vaadin.browserless.locator.Locators;
+import java.util.List;
+
 import com.vaadin.expensemanager.allowance.ui.AllowanceRatesView;
 import com.vaadin.expensemanager.reference.ui.ExpenseTypeView;
 import com.vaadin.expensemanager.reference.ui.VatRateView;
-import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.html.Paragraph;
-import com.vaadin.flow.component.orderedlayout.ThemableLayout;
-import com.vaadin.testing.unified.RequiresTestingTool;
-import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedElement;
 import com.vaadin.testing.unified.UnifiedPage;
-import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedContainer;
+import com.vaadin.testing.unified.component.UnifiedParagraph;
 import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.Test;
@@ -22,10 +20,11 @@ import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Browserless test (pyramid layer 3, ADR-0012) for the shared {@link PageHeader}
+ * Unified UI test (pyramid layer 3, ADR-0012) for the shared {@link PageHeader}
  * block across the three reference routes it opens — {@code /vat-rates},
  * {@code /expense-types} and {@code /allowance-rates} (#184,
  * {@code docs/design/components/page-header.md}).
@@ -39,12 +38,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 40px, that the intro's 1.6 leading is unitless rather than Aura's inherited
  * 20px length, that the heading's colour survives dark mode, and that the title
  * row wraps at 360px instead of pushing a scrollbar — none of those are
- * decidable from a component tree. They are the visual verification's, and this
+ * decidable from a component tree on every Testing Tool. They are the visual verification's, and this
  * class stops at the class names and the tokens the two gaps name.
  */
 @UnifiedSpringBootTest
 @ActiveProfiles("test")
-class PageHeaderUiTest implements Locators {
+class PageHeaderUiTest {
 
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES =
@@ -62,26 +61,20 @@ class PageHeaderUiTest implements Locators {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void vatRatesOpensWithTheSharedHeaderAndACreateButton(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: navigate(VatRateView.class)
-        var view = browserless.navigate(VatRateView.class);
+        page.navigate(VatRateView.class);
 
         assertHeader(page, "VAT rates", CREATE_LABEL);
-        assertSectionRhythm(view);
+        assertSectionRhythm(page);
     }
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void expenseTypesOpensWithTheSharedHeaderAndACreateButton(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: navigate(ExpenseTypeView.class)
-        var view = browserless.navigate(ExpenseTypeView.class);
+        page.navigate(ExpenseTypeView.class);
 
         assertHeader(page, "Expense types", CREATE_LABEL);
-        assertSectionRhythm(view);
+        assertSectionRhythm(page);
     }
 
     /**
@@ -91,14 +84,11 @@ class PageHeaderUiTest implements Locators {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void allowanceRatesOpensWithTheSameBlockAndNoHeaderAction(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: navigate(AllowanceRatesView.class)
-        var view = browserless.navigate(AllowanceRatesView.class);
+        page.navigate(AllowanceRatesView.class);
 
         assertHeader(page, "Allowance Rates", null);
-        assertSectionRhythm(view);
+        assertSectionRhythm(page);
     }
 
     // ------------------------------------------------------------- assertions
@@ -109,59 +99,54 @@ class PageHeaderUiTest implements Locators {
      *               carries no action at all
      */
     private void assertHeader(UnifiedPage page, String title, String action) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // One block per page: composed by PageHeader, not by the view.
-        // TODO unified: Browserless Escape Hatch: find(PageHeader.class).single(), no Wrapper for PageHeader: write one (ADR 0003)
-        var header = browserless.find(PageHeader.class).single();
-        assertThat(header.getElement().getClassList()).contains("page-header");
+        assertThat(page.find(UnifiedPageHeader.class)).hasCount(1);
+        UnifiedPageHeader header = page.find(UnifiedPageHeader.class);
         // The design's 20px between the title row and the intro, through the
         // layout API rather than CSS.
-        assertThat(header.getSpacing()).isEqualTo("var(--em-card-padding)");
+        assertThat(header.getGap()).isEqualTo("var(--em-card-padding)");
 
-        var parts = header.getChildren().toList();
+        List<UnifiedElement> parts = header.element().children();
         assertThat(parts).hasSize(2);
+        assertThat(classesOf(parts.get(0))).contains("page-header-top");
+        assertThat(classesOf(parts.get(1))).contains("page-intro");
 
-        var top = parts.get(0);
-        assertThat(top.getElement().getClassList()).contains("page-header-top");
-
-        var heading = top.getChildren().findFirst().orElseThrow();
-        assertThat(heading).isInstanceOf(H2.class);
-        assertThat(((H2) heading).getText()).isEqualTo(title);
+        UnifiedContainer top = header.find(UnifiedContainer.class).withClassName("page-header-top");
         // The class carries the display size, not the element — the shell owns
         // the page's h1, so a view's own heading is the second level.
-        assertThat(heading.getElement().getClassList()).contains("page-title");
+        assertThat(top.findComponent(H2.class).withClassName("page-title")).hasText(title);
 
-        var buttons = top.getChildren().filter(Button.class::isInstance)
-                .map(Button.class::cast).toList();
         if (action == null) {
-            assertThat(buttons).isEmpty();
+            assertThat(top.find(UnifiedButton.class)).doesNotExist();
         } else {
-            assertThat(buttons).singleElement().satisfies(button -> {
-                assertThat(button.getText()).isEqualTo(action);
-                assertThat(button.getThemeNames())
-                        .contains(ButtonVariant.PRIMARY.getVariantName());
-            });
+            assertThat(top.find(UnifiedButton.class)).hasCount(1);
+            assertThat(top.find(UnifiedButton.class)
+                    .withTheme(ButtonVariant.PRIMARY.getVariantName())).hasText(action);
         }
 
-        var intro = parts.get(1);
-        assertThat(intro).isInstanceOf(Paragraph.class);
-        assertThat(intro.getElement().getClassList()).contains("page-intro");
         // The intro is where the consequences live, so it is never absent.
-        assertThat(((Paragraph) intro).getText()).isNotBlank();
+        UnifiedParagraph intro = header.find(UnifiedParagraph.class).withClassName("page-intro");
+        assertThat(intro).exists();
+        assertThat(intro.getText()).isNotBlank();
     }
 
     /**
      * The tab bar, the header block and whatever the view puts below it are
      * siblings one section gap apart — the 40px all three frames draw.
      */
-    private void assertSectionRhythm(Component view) {
-        assertThat(((ThemableLayout) view).getSpacing())
-                .isEqualTo("var(--em-section-gap)");
-        assertThat(view.getChildren().toList())
-                .hasSizeGreaterThan(2)
-                .satisfies(children -> {
-                    assertThat(children.get(0)).isInstanceOf(ReferenceTabs.class);
-                    assertThat(children.get(1)).isInstanceOf(PageHeader.class);
-                });
+    private void assertSectionRhythm(UnifiedPage page) {
+        UnifiedVerticalLayout view = page.find(UnifiedVerticalLayout.class).where(e -> {
+            List<UnifiedElement> children = e.children();
+            return children.size() > 2
+                    && classesOf(children.get(0)).contains("reference-tabs")
+                    && classesOf(children.get(1)).contains("page-header");
+        });
+        assertThat(view).exists();
+        assertThat(view.getGap()).isEqualTo("var(--em-section-gap)");
+    }
+
+    private static List<String> classesOf(UnifiedElement element) {
+        String classes = element.getAttribute("class");
+        return classes == null ? List.of() : List.of(classes.trim().split("\\s+"));
     }
 }
