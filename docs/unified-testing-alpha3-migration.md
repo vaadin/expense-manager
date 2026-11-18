@@ -33,6 +33,7 @@ Maven wall clock, measured runs: 22.9 s / 22.2 s / 22.0 s. The warm-up took 21.9
 | MyReportsViewUiTest | 21 | 0.685 | 0.679–0.764 |
 | NavigationShellUiTest | 10 | 0.719 | 0.702–0.727 |
 | PageHeaderUiTest | 3 | 0.612 | 0.608–0.620 |
+| ErrorDialogFlowUiTest | 5 | 5 | 0 | 1 (R3: `VaadinSession.getCurrent()`) | 0 | 2 | 3/3 | **3/3** | The direct calls on the test thread (`errorHandler.error(..)`, `new EditorDialog(..).open()`) moved into a test-only route, `ErrorFlowTestView`, which alpha3 finds in the test package without configuration. Its failing button hands the exception to the session's handler, so "the handler is installed" is now observed (a dialog opens) instead of inspected. Both "no Wrapper" markers were unnecessary: `ErrorDialog` is a `Dialog` (`UnifiedDialog.withHeaderTitle`), and `ErrorSummary` is a `Div` (`UnifiedDiv.withClassName("error-summary")`). The extra attempt was my own call to a method that does not exist |
 | ReferenceConfigViewUiTest | 6 | 0.189 | 0.183–0.212 |
 | ReportDetailViewUiTest | 104 | 6.746 | 6.581–6.793 |
 | UserManagementViewUiTest | 10 | 1.132 | 1.109–1.139 |
@@ -210,6 +211,15 @@ for the markers, so for each class the table separates **markers** from **unmark
   `UI.navigate`, per `BrowserlessSession`), so the portable test asserts what the user sees: the app's
   not-found page. The skill has no marker guidance for "the test expected an exception from navigation"; the
   migration had to be read from the adapter source.
+- **S5, "no Wrapper for X" on a subclass of a Core Set component (recipe and skill).** The recipe names the
+  subclass (`ErrorDialog`, `ErrorSummary`), and the skill says to write a Wrapper. But the Core Set Wrapper of the
+  superclass, plus a filter (`UnifiedDialog.withHeaderTitle(..)`, `UnifiedDiv.withClassName(..)`), already finds
+  it on every tool. The skill could say: when X extends a Core Set component, try that Wrapper with a filter first.
+- **S6, an uncaught listener exception behaves differently by default.** Browserless rethrows it into the
+  test, while a browser routes it to the session `ErrorHandler`. alpha3 has a setting for this,
+  `vaadin.testing.browserless.route-errors-to-session`, documented only in the `BrowserlessAdapter` Javadoc. It is
+  global, so it was not switched on. The test view routes its own exception instead. Neither skill mentions the
+  setting.
 
 ## 3. Browserless runtime — after
 

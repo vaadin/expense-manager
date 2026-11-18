@@ -1,31 +1,25 @@
 package com.vaadin.expensemanager.base.ui;
 
-import com.vaadin.expensemanager.base.DomainRuleException;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
-import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.HasText;
-import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.data.binder.Binder;
-import com.vaadin.flow.server.ErrorEvent;
-import com.vaadin.flow.server.VaadinSession;
-import com.vaadin.testing.unified.RequiresTestingTool;
-import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.flow.component.html.Pre;
 import com.vaadin.testing.unified.UnifiedPage;
-import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedDialog;
+import com.vaadin.testing.unified.component.UnifiedDiv;
+import com.vaadin.testing.unified.component.UnifiedParagraph;
 import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Browserless end-to-end test (pyramid layer 3, ADR-0012) for the shared error
+ * Unified end-to-end test (pyramid layer 3, ADR-0012) for the shared error
  * routing (issue #86).
  *
  * <p>Two halves of the acceptance split:
@@ -34,10 +28,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       the session's error handler (so any uncaught action failure reaches it in
  *       production), and when it handles an error it opens the generic
  *       {@link ErrorDialog} showing only the reassuring message, never the raw cause
- *       under the non-local {@code test} profile. (The browserless harness rethrows an
- *       uncaught listener exception to the test rather than routing it through the
- *       session handler, so the handler is exercised directly; the production route
- *       Vaadin → session handler is verified by hand — see docs/manual-verification.)</li>
+ *       under the non-local {@code test} profile. Both are observed through
+ *       {@link ErrorFlowTestView}, whose failing button hands its exception to the
+ *       session's handler as Vaadin does in a browser (Browserless Test would
+ *       rethrow it into the test instead).</li>
  *   <li><strong>Domain rule</strong> — a {@link DomainRuleException} from a save is
  *       caught locally by the {@link EditorDialog} and lands in the form's summary,
  *       opening no dialog.</li>
@@ -56,76 +50,54 @@ class ErrorDialogFlowUiTest {
         POSTGRES.start();
     }
 
-    @Autowired
-    private UiErrorHandler errorHandler;
-
+    /**
+     * The wiring, observed rather than inspected: a failure handed to the session's
+     * handler opens {@link UiErrorHandler}'s dialog only if the init listener put
+     * that handler on the session — Vaadin's default handler just logs it.
+     */
     @Test
     void theGlobalHandlerIsInstalledAsTheSessionErrorHandler(UnifiedPage page) {
-        page.navigate(DashboardView.class);
+        page.navigate(ErrorFlowTestView.class);
+        assertThat(errorDialog(page)).doesNotExist();
 
-        // The VaadinServiceInitListener wired it onto the session, so any uncaught
-        // action failure is routed here in production (issue #86).
-        assertThat(VaadinSession.getCurrent().getErrorHandler())
-                .isInstanceOf(UiErrorHandler.class);
+        failUnexpectedly(page);
+
+        assertThat(errorDialog(page)).isOpen();
     }
 
     @Test
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void aTechnicalErrorOpensTheGenericDialogWithoutTheCause(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        page.navigate(DashboardView.class);
+        page.navigate(ErrorFlowTestView.class);
 
-        errorHandler.error(new ErrorEvent(new IllegalStateException("stack trace guts")));
+        failUnexpectedly(page);
 
-        // TODO unified: Browserless Escape Hatch: $(ErrorDialog.class).all(), no Wrapper for ErrorDialog: write one (ADR 0003)
-        var dialogs = browserless.$(ErrorDialog.class).all();
-        assertThat(dialogs).hasSize(1);
-        String dialogText = textOf(dialogs.getFirst());
-        assertThat(dialogText).contains(ErrorDialog.MESSAGE);
-        assertThat(dialogText).doesNotContain("stack trace guts");
+        assertThat(errorDialog(page)).hasCount(1);
+        assertThat(errorDialog(page)).hasTextContaining(ErrorDialog.MESSAGE);
+        assertThat(errorDialog(page).find(UnifiedParagraph.class)).hasText(ErrorDialog.MESSAGE);
+        // The cause would render as a <pre> (local profile only), never under `test`.
+        assertThat(errorDialog(page).findComponent(Pre.class)).doesNotExist();
+        assertThat(errorDialog(page).element().getText()).doesNotContain(ErrorFlowTestView.CAUSE);
     }
 
     @Test
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void aDomainRuleLandsInTheSummaryAndOpensNoDialog(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        page.navigate(DashboardView.class);
-        new EditorDialog<>("Editor", new TextField("Name"),
-                new Binder<>(Object.class), new Object())
-                .onSave(() -> {
-                    throw new DomainRuleException("Name is required");
-                })
-                .open();
+        page.navigate(ErrorFlowTestView.class);
+        page.find(UnifiedButton.class).withText(ErrorFlowTestView.OPEN_EDITOR).click();
+        UnifiedDialog editor = page.find(UnifiedDialog.class).withHeaderTitle("Editor");
 
-        clickSave(page);
+        editor.find(UnifiedButton.class).withText("Save").click();
 
         // No technical dialog; the user-actionable message shows in the form summary.
-        // TODO unified: Browserless Escape Hatch: $(ErrorDialog.class).all(), no Wrapper for ErrorDialog: write one (ADR 0003)
-        assertThat(browserless.$(ErrorDialog.class).all()).isEmpty();
-        // TODO unified: Browserless Escape Hatch: $(ErrorSummary.class).all(), no Wrapper for ErrorSummary: write one (ADR 0003)
-        var summaries = browserless.$(ErrorSummary.class).all();
-        assertThat(summaries).anyMatch(summary ->
-                summary.isVisible() && textOf(summary).contains("Name is required"));
+        assertThat(errorDialog(page)).doesNotExist();
+        assertThat(editor.find(UnifiedDiv.class).withClassName("error-summary").visible())
+                .hasTextContaining(ErrorFlowTestView.DOMAIN_RULE);
     }
 
-    private void clickSave(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: $(Button.class).all().stream().filter(button -> "Save".equals(button.getText())).findFirst().orElseThrow(() -> new AssertionError("No 'Save' button in the editor"))
-        var save = browserless.$(Button.class).all().stream()
-                .filter(button -> "Save".equals(button.getText()))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("No 'Save' button in the editor"));
-        // TODO unified: Component Reference: test(save).click(): replace it with a locator that finds the same component
-        browserless.test(save).click();
+    private static void failUnexpectedly(UnifiedPage page) {
+        page.find(UnifiedButton.class).withText(ErrorFlowTestView.FAIL).click();
     }
 
-    /** Flattens every rendered text node in a component tree, for content assertions. */
-    private static String textOf(Component component) {
-        var text = new StringBuilder();
-        if (component instanceof HasText hasText) {
-            text.append(hasText.getText()).append(' ');
-        }
-        component.getChildren().forEach(child -> text.append(textOf(child)));
-        return text.toString();
+    private static UnifiedDialog errorDialog(UnifiedPage page) {
+        return page.find(UnifiedDialog.class).withHeaderTitle(ErrorDialog.TITLE);
     }
 }
