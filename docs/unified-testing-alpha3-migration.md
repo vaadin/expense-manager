@@ -69,6 +69,83 @@ Notes:
 - The ADR-0012 comment above `spring-security-test` still says "browserless view-security tests". It is still
   accurate while the tests run on Browserless.
 
+### 1b. Code recipe — `MigrateBrowserlessTestCode`
+
+Same command with `-Drewrite.activeRecipes=org.vaadin.addons.unified.rewrite.MigrateBrowserlessTestCode`. The run
+took 22 s and succeeded. OpenRewrite estimates the time it saved at **4 h 35 min**. The raw output is commit
+`cec397b`, left unedited.
+
+**Coverage**
+
+| Measure | Result |
+|---|---|
+| Files rewritten | **16 / 16**: all 13 `*UiTest` classes and the 3 abstract bases |
+| Diff | +1204 / −707 lines (`ReportDetailViewUiTest` alone: +557 / −336) |
+| Classes left "not migrated" | **0**. No class uses the context API or passes `this` to a helper |
+| Test-class shape | `@UnifiedSpringBootTest` (9), test methods take `UnifiedPage page`, Browserless calls go through `BrowserlessEscapeHatch.of(page)` |
+| Files still importing `com.vaadin.browserless` | 7, through the Escape Hatches |
+
+**Migration Markers: 170**
+
+| Kind | Count | Breakdown |
+|---|---:|---|
+| `Browserless Escape Hatch` | 156 | `getCurrentView()` 61, `$(..)` 60, `find..()` 14, `navigate(..)` 13+, misc. **57** of them also say `no Wrapper for X`: `RowActionMenu` 15, `Div` 5, `ReferenceTabs` 5, `HorizontalLayout` 4, `Image` 4, `AppHeader` 3, `ErrorSummary` 3, `MenuBar` 2, `ErrorDialog` 2, `FormLayout` 2, `RouterLink` 2, `Span` 2, `Upload` 2, one each for `Anchor`, `AppLayout`, `ContextMenu`, `PageHeader`, `SideNav`, `VerticalLayout` |
+| `Component Reference` | 10 | `test(save)`, `test(chip)`, `rowActionButton(..)` helpers |
+| `Browserless-only pattern: @Transactional` | 4 | one per class-level `@Transactional`: `AllowanceRatesViewUiTest`, `UserManagementViewUiTest`, `AbstractReportViewUiTest`, `AbstractReferenceDataViewUiTest` |
+
+Per file: `ReportDetailViewUiTest` 88, `AllowanceRatesViewUiTest` 16, `ApprovalQueueViewUiTest` 14,
+`NavigationShellUiTest` 12, `ExpenseTypeViewUiTest` 7, `MyReportsViewUiTest` / `ErrorDialogFlowUiTest` /
+`ApprovalAccessUiTest` 5 each, `ReferenceConfigViewUiTest` / `PageHeaderUiTest` 4, `UserManagementViewUiTest` /
+`DashboardViewUiTest` 3, `AbstractReferenceDataViewUiTest` 2, `VatRateViewUiTest` / `AbstractReportViewUiTest` 1.
+
+**`@RequiresTestingTool(BROWSERLESS)`**: 136 on methods and 4 on classes. **204 of 205 tests are tagged
+Browserless-only.** The remaining one should be too (defect R3). The recipe output makes no test portable yet.
+That is by design: it pins whatever it can't express to Browserless and leaves the portability work to the
+markers.
+
+**Compiles: no.** There was 1 error, then 2 more after the first fix: `page` not in scope in
+`ReportDetailViewUiTest` (defect R1). The minimal fix is commit `ce5bbe4`: 3 helpers get a `UnifiedPage page`
+parameter, and 43 call sites pass it (46 lines, one file).
+
+**Runs (with `ce5bbe4`, and before the step 5 config)**
+
+| Tool | Tests | Pass | Fail | Error | Skipped |
+|---|---:|---:|---:|---:|---:|
+| Browserless | 205 | **205** | 0 | 0 | 0 |
+| Playwright | 64 reported | 0 | 0 | **6** | 58 |
+
+Browserless needed **no** `vaadin.testing.browserless.view-packages` setting. In alpha2 it was required for
+`DashboardView`; alpha3 seems to find routes outside the test's package by itself (to be confirmed in step 5).
+
+On Playwright, the 5 classes under the abstract bases fail as a whole (reported as 1 each), and one test errors
+in `ErrorDialogFlowUiTest`. The 58 skips are expected.
+
+**Recipe and library defects found**
+
+- **R1, recipe: `page` threaded one call deep only.** The recipe gave the helper `rowMenu(..)` a
+  `UnifiedPage page` parameter but did not give it to the helpers that call it: `clickRowAction(String,String)`,
+  then `overrideCount(..)` and `editTripReturn(..)`. Result: a compile error. The parameter has to be passed up
+  through every helper between the test method and the call that needs it.
+- **R2, recipe: a comment above a marked statement is swallowed into the marker.** In 6 places
+  (`ApprovalAccessUiTest` 1, `ExpenseTypeViewUiTest` 3, `ReportDetailViewUiTest` 2), the statement's leading
+  comment is joined into the `// TODO unified:` line with its line breaks removed, e.g.
+  `// TODO unified: Browserless Escape Hatch:// The review alias is @PermitAll but gated in-view: a USER is forwarded to// the dashboard, ...navigate(..)`.
+  The original comment no longer exists as a comment, so it is **lost when the marker is resolved and
+  deleted**.
+- **R3, recipe: direct `VaadinSession.getCurrent()` not detected.**
+  `ErrorDialogFlowUiTest.theGlobalHandlerIsInstalledAsTheSessionErrorHandler` reads server state directly. It
+  gets neither a marker nor `@RequiresTestingTool`, so it fails with an NPE on Playwright.
+- **L1, library: `@RequiresTestingTool` is not `@Inherited`** (checked with `javap`: only `@Target` and
+  `@Retention`). The recipe puts it, next to `@Transactional`, on the abstract bases `AbstractReportViewUiTest`
+  and `AbstractReferenceDataViewUiTest`. Spring's `@Transactional` *is* inherited, so `TransactionalCheck` sees it
+  on the 5 subclasses (`MyReports`, `ReportDetail`, `ExpenseType`, `ReferenceConfig`, `VatRate`). It then
+  **errors** with "@Transactional … doesn't work on PLAYWRIGHT" instead of the class being skipped. The same
+  annotations on concrete classes (`AllowanceRatesViewUiTest`, `UserManagementViewUiTest`) skip correctly.
+  The fix belongs either in the library (make the annotation `@Inherited`, or look it up in superclasses) or in
+  the recipe (put it on the concrete subclasses).
+
+_Wrong rewrites found later, during step 6, are added here._
+
 ## 2. Skill efficiency
 
 _Step 6, `resolve-migration-markers`._
