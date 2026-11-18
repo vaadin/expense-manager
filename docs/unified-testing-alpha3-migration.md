@@ -192,6 +192,7 @@ for the markers, so for each class the table separates **markers** from **unmark
 | Class | Markers | Resolved | Kept | Unmarked lines converted | Wrappers written | Attempts until green | Browserless | Playwright | Notes |
 |---|---:|---:|---:|---:|---:|---:|---|---|---|
 | DashboardViewUiTest | 3 | 3 | 0 | 0 | 0 | 1 | 3/3 | **3/3** | `@RequiresTestingTool` removed from all 3 tests. `UnifiedMenuBar` used despite the marker (R4). `findComponent(H2.class)` for the greeting, since there is no heading Wrapper |
+| UserManagementViewUiTest | 3 | 3 | 0 | ~31 | 0 | 1 | 10/10 | **10/10** | Class-level `@Transactional` and `@RequiresTestingTool` removed, along with `implements Locators`. An `@AfterEach` restores the seeded users. `GridLocator` column scans became `row().withCellText("Email", ..)` with retrying `hasCellText`. The denied route is now "see H2 'Page not found', see no grid" instead of "navigate throws". The two nav-entry tests needed nothing: they read the nav model on the test thread, which works on any tool |
 
 **Skill and API observations**
 
@@ -199,6 +200,15 @@ for the markers, so for each class the table separates **markers** from **unmark
   getters, so the account-menu check reads once without retrying, and `user-steps.txt` shows only
   `open Dashboard`. The skill says a check that leaves no `see` line is "a test that does less than asked", but
   there is no MenuBar assertion to write instead.
+- **S2, `@Transactional`: the skill's "commit and clean up" route was cheap here.** One `@AfterEach` of 6 lines
+  undoes the 3 writes. All 205 UI tests still pass on Browserless after the class stopped rolling back. The skill
+  frames keeping the Escape Hatch as the default; for a class with a few known writes, converting was quicker
+  than deciding to keep it.
+- **S3, behaviour differs by tool behind one call.** The Browserless original asserted that
+  `navigate(UserManagementView.class)` *throws* for a USER. `page.navigate(..)` deliberately does not throw (it uses
+  `UI.navigate`, per `BrowserlessSession`), so the portable test asserts what the user sees: the app's
+  not-found page. The skill has no marker guidance for "the test expected an exception from navigation"; the
+  migration had to be read from the adapter source.
 
 ## 3. Browserless runtime — after
 
