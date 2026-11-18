@@ -8,8 +8,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
-import com.vaadin.browserless.locator.Locators;
 import com.vaadin.expensemanager.report.domain.ExpenseLineSpec;
 import com.vaadin.expensemanager.report.domain.ExpenseReport;
 import com.vaadin.expensemanager.report.domain.GeneratedLineKind;
@@ -22,6 +20,8 @@ import com.vaadin.expensemanager.reference.ExpenseTypeRepository;
 import com.vaadin.expensemanager.reference.VatRate;
 import com.vaadin.expensemanager.reference.VatRateRepository;
 import com.vaadin.expensemanager.user.UserRepository;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.component.UnifiedMain;
 import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.AfterEach;
@@ -35,8 +35,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * {@link ApprovalQueueViewUiTest} and {@link ApprovalAccessUiTest}.
  *
  * <p>Modelled on {@code AdminToolsViewUiTest}, <strong>not</strong> the report
- * feature's {@code AbstractReportViewUiTest}: it extends {@link SpringBrowserlessTest}
- * directly and is deliberately <em>not</em> {@code @Transactional}. Rollback
+ * feature's {@code AbstractReportViewUiTest}: it is deliberately <em>not</em>
+ * {@code @Transactional} (which also lets it run on every Testing Tool). Rollback
  * isolation interacts badly with browserless security-context ordering once
  * several browserless classes have run (a report opens as {@code LoginView},
  * F-020/F-008 family), whereas the non-transactional {@code @WithUserDetails}
@@ -49,8 +49,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  */
 @UnifiedSpringBootTest
 @ActiveProfiles("test")
-abstract class AbstractApprovalViewUiTest
-        implements Locators {
+abstract class AbstractApprovalViewUiTest {
 
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES =
@@ -73,6 +72,11 @@ abstract class AbstractApprovalViewUiTest
     protected VatRateRepository vatRateRepository;
 
     private final List<Long> createdReportIds = new ArrayList<>();
+
+    /** The routed view's column inside {@code MainLayout}, for what the page says. */
+    protected static UnifiedMain view(UnifiedPage page) {
+        return page.find(UnifiedMain.class).withClassName("app-shell__content");
+    }
 
     @AfterEach
     void cleanUp() {

@@ -26,6 +26,7 @@ Maven wall clock, measured runs: 22.9 s / 22.2 s / 22.0 s. The warm-up took 21.9
 |---|---:|---:|---|
 | AllowanceRatesViewUiTest | 18 | 6.948 | 6.570–7.203 |
 | ApprovalAccessUiTest | 4 | 0.660 | 0.653–0.665 |
+| ApprovalQueueViewUiTest | 14 | 14 | 0 | ~19 | 0 | 2 | 8/8 | **8/8** | `getCurrentView().getElement().getTextRecursively()` became `assertThat(view(page)).hasTextContaining(..)`, which retries. The `RouterLink` "no Wrapper" markers became `findComponent(RouterLink.class).withAttribute("href", "review/"+id)`. `UI.getCurrent()` text in the reject dialog became `dialog.hasTextContaining(..)`. Repository checks moved after a UI assertion, so on a browser they run once the server has answered. Second attempt: `.visible()` on every "the action is gone" check (S9) |
 | ApprovalQueueViewUiTest | 8 | 0.400 | 0.385–0.443 |
 | DashboardViewUiTest | 3 | 0.641 | 0.546–0.677 |
 | ErrorDialogFlowUiTest | 3 | 0.604 | 0.580–0.617 |
@@ -34,6 +35,8 @@ Maven wall clock, measured runs: 22.9 s / 22.2 s / 22.0 s. The warm-up took 21.9
 | ReferenceConfigViewUiTest | 4 | 4 | 0 | ~21 | 0 | 1 | 6/6 | **6/6** | `ErrorSummary` found as `UnifiedDiv.withClassName("error-summary")`. `UI.getCurrent().getElement().getTextRecursively()` became `summary.hasTextContaining(..)` (R3 again, unmarked). Disabled boundary buttons use `assertThat(button).isDisabled()` |
 | ExpenseTypeViewUiTest | 7 | 7 | 0 | ~29 | 0 | 1 | 11/11 | **11/11** | The glyph (`SvgIcon.getSymbol()` on the server) became `row.cell("Icon").findComponent(SvgIcon.class)` with `hasProperty("symbol", ..)`. `ReferenceTabs` uses `UnifiedTabs.withClassName("reference-tabs").hasSelectedTab(..)`, so no Wrapper was needed (S5). Rows are found by name. The four "Component Reference" markers with swallowed comments (R2) were resolved and their comments restored by hand. The whole family also passes together with `UserManagementViewUiTest` in one run on both tools, which shows the snapshot restore isolates the tests |
 | NavigationShellUiTest | 12 | 12 | 0 | 0 | 0 | 1 | 10/10 | **10/10** | All 6 "no Wrapper" markers (`AppHeader` ×3, `AppLayout`, `SideNav`, `ContextMenu`, `MenuBar`) were resolved without writing a Wrapper. `AppHeader extends Header` uses `UnifiedHeader.withClassName("app-header")`, its pills are the `UnifiedNav`'s `element().children()`, and the absent `AppLayout`/`SideNav` use `findComponent(..).doesNotExist()`. "No `ContextMenu` targets the Reference pill" (a server-side `getTarget()` comparison) became behaviour: the pill is an `<a href="vat-rates">`, and clicking it lands on `VatRateView`. `getCurrentView()` became `assertThat(page).isAt(..)`, except for the error view, which has no route, so it asserts the "Page not found" heading instead. The pill reads (`currentNavLabel`, `navLabels`) are immediate getters; they passed on Playwright straight after a navigation, but they do not retry |
+| AbstractApprovalViewUiTest (base) | 0 | — | — | 1 (`implements Locators`) | 0 | 1 | — | — | Already non-transactional with an explicit `@AfterEach` cleanup, so nothing about test data had to change. Added a `view(page)` helper, `UnifiedMain.withClassName("app-shell__content")`, the column `MainLayout` renders a view into, for "the page says X" checks |
+| ApprovalAccessUiTest | 5 | 5 | 0 | ~5 | 0 | 2 | 4/4 | **4/4** | Denied routes show the not-found page. `navigate("review/"+id, DashboardView.class)` became `navigate(..)` plus `isAt(DashboardView.class)`. The status `Badge` (a Vaadin 25.3 component with no Core Set Wrapper) uses `findComponent(Badge.class).withText(..)`. The second attempt added `.visible()` (S9). The R2 comment swallowed into a marker was restored |
 | ExpenseTypeViewUiTest | 11 | 0.388 | 0.373–0.402 |
 | MyReportsViewUiTest | 21 | 0.685 | 0.679–0.764 |
 | NavigationShellUiTest | 10 | 0.719 | 0.702–0.727 |
@@ -234,6 +237,13 @@ for the markers, so for each class the table separates **markers** from **unmark
   originals addressed rows by index ("Restaurant/meals is the fourth seeded row (index 3)"). The Unified forms find
   the row by its text and keep an index only where position is the claim being tested (reorder, "kept its
   position").
+- **S9, lookups include hidden components; the old Browserless locators did not.** `findButton().withText("Save").exists()`
+  was false for a button hidden with `setVisible(false)`. `page.find(UnifiedButton.class).withText("Save")` matches
+  it on every tool (documented on `CommonFilters`: "Add `visible()` where that matters, e.g. the action is
+  gone"). A literal conversion of every unmarked `exists()` check therefore flips meaning wherever the view hides
+  rather than removes. That is 3 failures in the approval family, on both tools. Neither the recipe (it does not touch
+  this code, R5) nor the skill mentions it. A rule worth adding: an absence check on something the view toggles
+  needs `.visible()`.
 
 ## 3. Browserless runtime — after
 

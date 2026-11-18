@@ -5,16 +5,16 @@ import java.time.LocalDate;
 import com.vaadin.expensemanager.base.ui.DashboardView;
 import com.vaadin.expensemanager.report.ui.ReportDetailView;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
-import com.vaadin.testing.unified.RequiresTestingTool;
-import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.flow.component.badge.Badge;
+import com.vaadin.flow.component.html.H2;
 import com.vaadin.testing.unified.UnifiedPage;
-import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedGrid;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 
 /**
  * Browserless view test (pyramid layer 3, ADR-0008/ADR-0012) for the approval
@@ -31,57 +31,49 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ApprovalAccessUiTest extends AbstractApprovalViewUiTest {
 
     @Test
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void aNonAdminCannotReachTheQueueRoute(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // Navigation access control rejects a USER: the ADMIN-only view never
-        // resolves (mirrors AdminToolsViewUiTest).
-        // TODO unified: Browserless Escape Hatch: navigate(ApprovalQueueView.class)
-        assertThatThrownBy(() -> browserless.navigate(ApprovalQueueView.class))
-                .isInstanceOf(Exception.class);
+        // resolves (mirrors AdminToolsViewUiTest) — the user gets the not-found page.
+        page.navigate(ApprovalQueueView.class);
+        assertDenied(page);
     }
 
     @Test
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void aNonAdminCannotReachTheReviewHistoryRoute(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: navigate(ReviewHistoryView.class)
-        assertThatThrownBy(() -> browserless.navigate(ReviewHistoryView.class))
-                .isInstanceOf(Exception.class);
+        page.navigate(ReviewHistoryView.class);
+        assertDenied(page);
     }
 
     @Test
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void aNonAdminCannotEnterReviewMode(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedSubmittedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
 
         // The review alias is @PermitAll but gated in-view: a USER is forwarded to
         // the dashboard, never rendering the report in review mode.
-        // TODO unified: Browserless Escape Hatch:// The review alias is @PermitAll but gated in-view: a USER is forwarded to// the dashboard, never rendering the report in review mode.navigate("review/" + id, DashboardView.class)
-        browserless.navigate("review/" + id, DashboardView.class);
-        // TODO unified: Browserless Escape Hatch: getCurrentView()
-        assertThat(browserless.getCurrentView()).isInstanceOf(DashboardView.class);
+        page.navigate("review/" + id);
+        assertThat(page).isAt(DashboardView.class);
     }
 
     @Test
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void ownerSeesTheirApprovedReportReadOnly(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedApprovedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
 
         page.navigate(ReportDetailView.class, id);
 
-        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
-        var text = browserless.getCurrentView().getElement().getTextRecursively();
-        assertThat(text).contains("Approved");
-        assertThat(findButton().withText("Save").exists()).isFalse();
-        assertThat(findButton().withText("Submit for approval").exists()).isFalse();
-        assertThat(findButton().withText("Delete").exists()).isFalse();
-        assertThat(findButton().withText("Add expense").exists()).isFalse();
-        // The owner never sees an Approve action — that is the admin's alone.
-        assertThat(findButton().withText("Approve").exists()).isFalse();
+        assertThat(view(page).findComponent(Badge.class).withText("Approved")).exists();
+        for (String action : new String[] { "Save", "Submit for approval", "Delete",
+                "Add expense",
+                // The owner never sees an Approve action — that is the admin's alone.
+                "Approve" }) {
+            // visible(): the view hides its actions rather than removing them.
+            assertThat(page.find(UnifiedButton.class).withText(action).visible()).doesNotExist();
+        }
+    }
+
+    private static void assertDenied(UnifiedPage page) {
+        assertThat(page.findComponent(H2.class).withText("Page not found")).exists();
+        assertThat(page.find(UnifiedGrid.class)).doesNotExist();
     }
 }
