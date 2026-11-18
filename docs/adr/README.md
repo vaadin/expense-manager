@@ -2,7 +2,7 @@
 
 Each ADR records one load-bearing decision for the Expense Management app (V1), the context that forced it, and its consequences. ADRs are immutable once accepted — to change a decision, add a new ADR that supersedes the old one.
 
-Status values: `Accepted`, `Superseded by ADR-XXXX`, `Deprecated`.
+Status values: `Proposed`, `Accepted`, `Superseded by ADR-XXXX`, `Deprecated`.
 
 | ADR | Decision | Status |
 |-----|----------|--------|
@@ -32,5 +32,6 @@ Status values: `Accepted`, `Superseded by ADR-XXXX`, `Deprecated`.
 | [0024](0024-generated-line-quantity-override.md) | Generated lines corrected by overriding the quantity, never the amount | Accepted |
 | [0025](0025-figma-design-source-of-truth.md) | Figma is the design-system source of truth, for visual decisions only | Accepted |
 | [0026](0026-lucide-icon-set.md) | Lucide is the app's icon set, delivered as one vendored SVG sprite | Accepted |
+| [0027](0027-unified-ui-tests.md) | UI tests on the Unified API, run on Browserless and Playwright | Proposed (would supersede layer 3 of 0012) |
 
 See also: [../glossary.md](../glossary.md) · [../plan.md](../plan.md) · [../findings.md](../findings.md)

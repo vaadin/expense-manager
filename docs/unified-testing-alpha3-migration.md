@@ -216,7 +216,7 @@ for the markers, so for each class the table separates **markers** from **unmark
 | Unmarked Browserless lines converted (R5) | ≈ 440 |
 | `@RequiresTestingTool` left | **0** (was 140) |
 | Tests running on Playwright | **205 / 205** (was 0 passing: 58 skipped, 6 errors) |
-| Wrappers written (ADR 0003) | 3: `UnifiedPageHeader`, `UnifiedVerticalLayout`, `UnifiedHorizontalLayout` (`base/ui`). Every other "no Wrapper" marker (54 of 57) was resolved with a Core Set Wrapper plus a filter (R4, S5) |
+| Wrappers written (ADR 0003) | 3: `UnifiedPageHeader`, `UnifiedVerticalLayout`, `UnifiedHorizontalLayout` (`base/ui`). they cover 6 "no Wrapper" markers; the other 51 of 57 were resolved with a Core Set Wrapper plus a filter, or `findComponent(..)` (R4, S5) |
 | Test support added | `base/TableSnapshot` (replaces `@Transactional` in 3 bases and 2 classes); `ErrorFlowTestView` (a test-only route) |
 | Checks a tool can't make | 3 extra checks through `tryUnwrap(..)` (FormLayout steps and spacings ×2, DateTimePicker min/max wording); they run where the component is at hand and are skipped elsewhere, without skipping the test |
 | Tool-aware branches | 1 (`page.hasRealBrowser()` to pick the date format, S11) |
@@ -363,3 +363,53 @@ a mock environment there would remove ≈ 10 s of the 11.5 s regression on this 
 
 For scale, on Playwright `ReportDetailViewUiTest` alone took ≈ 118 s (single run, step 6) against
 8.6 s here. The Playwright suite was not benchmarked with this protocol.
+
+## 4. Compared with the alpha2 hand port (branch `unified-testing`)
+
+The alpha2 port was done by hand, before a recipe existed (`docs/unified-testing-benchmark.md` and
+`docs/adr/0027-unified-ui-tests.md` on that branch). Same app, same 205 tests, same Vaadin 25.3.5.
+
+| | alpha2, by hand | alpha3, recipe + skill |
+|---|---|---|
+| Test source changed (`src/test`, from the 25.3.5 upgrade) | 30 files, +3675 / −2392 | 21 files, +2430 / −2195 |
+| Project Wrappers | 9 (`base/ui/unified/`: MenuBar, Upload, FormLayout, layouts, MetricCard, ErrorHandlingButton, …) | 3 (`UnifiedPageHeader`, `UnifiedVerticalLayout`, `UnifiedHorizontalLayout`) |
+| Tests restricted to one tool | 1 (date-time picker messages, Browserless only) | **0** (`typeText` for the input, `tryUnwrap` for the extra wording check) |
+| Configuration needed | `junit-platform.properties` with `view-packages` | none |
+| Production code touched | `my-reports-view` root class added | none |
+| Data isolation | `DatabaseSnapshotExtension`: whole database copied to a schema, restored after every test | `TableSnapshot`: only the tables a test family writes, restored by id |
+| Spring contexts in a Browserless run | 1 (one shared `AbstractUiTest` base) | 9 (classes kept their own setup) |
+| Browserless wall clock, `*UiTest` | 27 s (single run) | 34 s (median of 3) |
+| Playwright | 204 pass, 1 skipped | 205 pass |
+
+**What alpha3 fixed from alpha2's draft upstream list** (observed in this run): `@Transactional` is now
+caught loudly by `TransactionalCheck` instead of differing silently (U-1); routes outside the test's package
+are found without configuration (U-2); hidden components count the same way on every tool and `visible()` is
+documented (U-8); `withAccessibleName` matches a field's `setAriaLabel` (U-10, the year selector); listener
+exceptions can be routed to the session `ErrorHandler` (U-12, setting only); the Core Set now covers
+`MenuBar` with icon-only, `aria-label`-named items and enabled state (#108), `Upload` on Playwright (#122),
+`Tabs` named by a wrapped `RouterLink` (#107), `Div`, `Span`, `Nav`, `Header`, `Main`, … (U-13). That is
+why 6 of alpha2's 9 project Wrappers were not needed.
+
+**What the recipe and skill added over doing it by hand:** the mechanical half (≈ 400 lines rewritten into
+Escape Hatch form, `@Transactional` and session use flagged, a marker per decision), plus a checklist that
+was accurate for every marker kind it names. **What they did not:** the `Locators` mixin, about 3× the
+marked work (F-083), and the per-tool traps that cost the debugging rounds (F-087, F-088). In practice the
+hand-written part of this migration was roughly the size of the alpha2 port's, but it started from a
+compiling-in-one-fix, all-green-on-Browserless baseline and ended with fewer Wrappers and no tool-specific
+tests.
+
+The one place alpha2 did better is Browserless speed: its single shared base class gave one Spring context
+(27 s against 34 s). Carrying that over is the main follow-up (F-086).
+
+## 5. Verdict
+
+- **Recipe efficiency:** good at what it covers. The build recipe was flawless; the code recipe needed a
+  46-line compile fix. It covers only about a quarter of the real work, and its marker count is misleading
+  as a progress measure (F-083). Defects: R1–R5, L1.
+- **Skill efficiency:** 170 / 170 markers resolved with its guidance, none kept. Its marker reference was
+  right every time it applied. Its gaps (F-089) are the patterns that made 8 of 16 files need a second
+  run.
+- **Runtime:** Browserless +60 %, ~91 % of it from `@UnifiedSpringBootTest`'s `RANDOM_PORT` times 9
+  contexts (F-086); the Unified API's own per-test overhead is within noise.
+- **Outcome:** every UI test now also runs in a real browser, the thing ADR-0012 ruled out for V1.
+  ADR-0027 (Proposed) records the decision. It cannot be accepted or reach CI until alpha3 is published.

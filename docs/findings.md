@@ -2971,3 +2971,166 @@ Deployment/Observability · UX-spec
   notes; make `use(component)` on an instance act on that instance, or fail with "this
   component is not reachable from the UI (Grid cell?) — use the tester directly".
 - Owner / next step: fixed in the upgrade commit on `try/unified-testing-tool`.
+
+### F-083 — The Unified Test alpha3 Browserless recipe ignores the `Locators` mixin, so its Migration Markers understate the remaining work about threefold
+- Date: 2026-11-18
+- Area: Tooling/Template
+- Severity: High
+- Task being attempted: migrating the 13 `*UiTest` classes from Browserless Test to Unified Test
+  0.1.0-alpha3 through its OpenRewrite recipe `MigrateBrowserlessTestCode`, then its
+  `resolve-migration-markers` skill (`docs/unified-testing-alpha3-migration.md`).
+- Expected vs actual: expected every Browserless-only call to end up either in Unified API code or
+  behind a `// TODO unified:` marker. Actual: the recipe converts the `SpringBrowserlessTest` base-class
+  API (`navigate`, `$`, `test`, `getCurrentView`) and leaves 170 markers. It does not touch the fluent
+  locator mixin `com.vaadin.browserless.locator.Locators` (`findGrid`, `findButton`, `findTextField`,
+  `GridLocator`, …), nor direct `UI.getCurrent()` / `VaadinSession.getCurrent()` calls. That leaves
+  ≈ 440 Browserless-only lines with no marker. The class-level `@RequiresTestingTool(BROWSERLESS)` the
+  recipe adds keeps all of it green, so no test run reveals it. `UserManagementViewUiTest`: 3 markers,
+  ≈ 31 unmarked lines.
+- Workaround used: converted the unmarked code by hand and by script in step 6 (log § 2, "unmarked
+  lines converted" column).
+- Evidence: commit `cec397b` (raw recipe output); log § 1b, R5.
+- Impact: the marker count is the natural progress measure of a migration, and it reports about a third
+  of the work. A team that stops at "0 markers left" still has a Browserless-only suite.
+- Suggested Vaadin/product improvement: migrate the `Locators` mixin like the base-class API (most calls
+  map 1:1 to `page.find(Unified*.class)`), or at least mark every use. Also mark direct
+  `UI.getCurrent()`/`VaadinSession.getCurrent()` in test code.
+- Owner / next step: upstream issue against parttio/unified-testing-tool.
+
+### F-084 — Smaller alpha3 recipe defects: half-threaded `page`, stale "no Wrapper" markers, unmarked session access
+- Date: 2026-11-18
+- Area: Tooling/Template
+- Severity: Medium
+- Task being attempted: as F-083.
+- Expected vs actual:
+  1. **The recipe's output does not compile** (R1). It gives a helper a `UnifiedPage page` parameter
+     but not the helpers that call it: one error, then 2 more, in `ReportDetailViewUiTest`.
+  2. **"no Wrapper for X: write one" for components alpha3 does wrap** (R4): `MenuBar`, `Div`, `Span`,
+     `Upload`, 11 of 57 such markers. 40 more name a *subclass* of a Core Set component (`ErrorDialog`,
+     `ErrorSummary`, `RowActionMenu`, `AppHeader`, …) or a plain element (`Image`, `Anchor`,
+     `RouterLink`) that a Core Set Wrapper plus a filter, or `findComponent(..)`, already finds. In the end,
+     51 of 57 needed no new Wrapper; 3 Wrappers covered the other 6.
+  3. **A direct `VaadinSession.getCurrent()` gets no marker** (R3), so the test fails on Playwright with
+     an NPE instead of being skipped or flagged.
+  4. A comment above a marked statement is copied into the marker text, flattened (R2). This is noise
+     only; the original comment stays.
+- Workaround used: a 46-line compile fix (`ce5bbe4`); Core Set Wrappers with filters.
+- Evidence: log § 1b (R1–R4), § 2 table.
+- Impact: (2) sends the agent or developer off to write Wrappers that exist. (1) means the recipe's
+  output cannot be measured before a hand fix.
+- Suggested Vaadin/product improvement: thread `page` up the call graph; check the Core Set, superclasses
+  included, before emitting "no Wrapper"; mark static session access.
+- Owner / next step: upstream issue.
+
+### F-085 — `@RequiresTestingTool` is not `@Inherited`, so a Browserless-only base class errors on Playwright instead of skipping
+- Date: 2026-11-18
+- Area: Tooling/Template
+- Severity: Medium
+- Task being attempted: running the recipe's raw output on Playwright.
+- Expected vs actual: the recipe puts `@Transactional` + `@RequiresTestingTool(BROWSERLESS)` on abstract
+  bases (`AbstractReportViewUiTest`, `AbstractReferenceDataViewUiTest`). Expected the 5 subclasses to be
+  skipped on Playwright. Actual: Spring's `@Transactional` is inherited, the tool annotation is not
+  (`javap`: only `@Target`/`@Retention`), so `TransactionalCheck` sees the former without the latter and
+  every subclass *errors* with "@Transactional … doesn't work on PLAYWRIGHT".
+- Workaround used: none needed in the end. Step 6 removed both annotations everywhere.
+- Evidence: log § 1b, L1.
+- Impact: the first Playwright run of a migrated suite shows errors where it should show skips.
+- Suggested Vaadin/product improvement: make `@RequiresTestingTool` `@Inherited` (or look it up through
+  superclasses), or have the recipe annotate concrete classes.
+- Owner / next step: upstream issue.
+
+### F-086 — `@UnifiedSpringBootTest` always starts a web server, which makes the Browserless suite 60 % slower
+- Date: 2026-11-18
+- Area: Verification
+- Severity: Medium
+- Task being attempted: step 7 of the migration, the Browserless runtime before vs after on the same
+  Vaadin 25.3.5.
+- Expected vs actual: expected a similar time: same tests, same tool. Actual: the sum of class times went
+  20.1 s → 32.1 s, and Maven wall clock 22 s → 34 s. Test bodies grew only 7.8 %. Spring context startup
+  grew 7.1 s → 17.5 s. `@UnifiedSpringBootTest` is meta-annotated
+  `@SpringBootTest(webEnvironment = RANDOM_PORT)`, so each context starts Tomcat and the Vaadin servlet
+  even when the run is Browserless (log: `Tomcat started on port` 0 → 9 times; ≈ 0.45 s → 1.55 s per
+  context). This app has **9** distinct test contexts, because each standalone `*UiTest` declares its own
+  `@ServiceConnection` container, which multiplies the cost. The alpha2 port had one shared base and one
+  context.
+- Workaround used: none yet.
+- Evidence: log § 3 (per-class table and startup/body split); `UnifiedSpringBootTest.java` in
+  `unified-test-spring-0.1.0-alpha3-sources.jar`.
+- Impact: the developer loop, Browserless, gets slower purely from the annotation.
+- Suggested Vaadin/product improvement: pick the web environment from the Testing Tool (mock for
+  Browserless), or expose `webEnvironment` as an alias.
+- Owner / next step: upstream issue. Locally, one shared UI-test base class (a single context) would win
+  back most of it; tracked as a follow-up in the ADR.
+
+### F-087 — The same Unified call silently means different things per Testing Tool in three places
+- Date: 2026-11-18
+- Area: Verification
+- Severity: Medium
+- Task being attempted: making all 205 UI tests pass on Browserless *and* Playwright.
+- Expected vs actual: expected "written once, same meaning everywhere". Three exceptions each cost a
+  debugging round:
+  1. **Hidden components.** Lookups include hidden components, and `getText()` reads hidden content, on
+     both tools. The old Browserless locators skipped them. A literal conversion of
+     `findButton().withText("Approve").exists()` flips meaning wherever the view hides instead of
+     removing (3 approval failures, both tools). The fix is `.visible()`, which the `CommonFilters`
+     Javadoc documents. The skill does not mention it.
+  2. **`element().click()` on a `vaadin-checkbox`** toggles it on Browserless and does nothing in
+     Chromium. That gave 4 Playwright failures far from the click. `UnifiedCheckbox` offers
+     `check()`/`uncheck()` only.
+  3. **`UnifiedDateTimePicker.typeText(date, time)`** parses ISO dates on Browserless and the locale
+     format (`7/1/2026`) in a browser, so an "incomplete input" test must branch on
+     `page.hasRealBrowser()`.
+- Workaround used: `.visible()` on every absence check; `check()`/`uncheck()`; one
+  `hasRealBrowser()` branch.
+- Evidence: log § 2 notes S9, S11, S12, S13.
+- Impact: each passes on one tool and fails, or worse passes vacuously, on the other.
+- Suggested Vaadin/product improvement: give `UnifiedCheckbox` a `click()` that toggles everywhere (or
+  fail fast on `element().click()` there); a locale-neutral way to type a valid date; mention
+  `.visible()` for absence checks in the migration skill.
+- Owner / next step: upstream issues for 2 and 3; 1 is a documentation gap.
+
+### F-088 — Dropping `@Transactional` from UI tests: lazy fixtures and a cross-class leak that only a full run with container reuse shows
+- Date: 2026-11-18
+- Area: Verification
+- Severity: Medium
+- Task being attempted: making the view tests run on a real browser, whose request threads never see the
+  test's transaction (the recipe flags this, "Browserless-only pattern: @Transactional").
+- Expected vs actual:
+  1. Fixtures that load an aggregate and call a domain method (`report.reject(..)`) relied on the open
+     test session and now throw `LazyInitializationException` on both tools.
+  2. A report test creates an expense type through the service. The report base restored only
+     `expense_report`, so the row leaked. Each class passed alone. In the full suite
+     `ExpenseTypeViewUiTest` saw 15 types instead of 9, and a still-`@Transactional` integration test
+     (`ReferenceDataPersistenceIntegrationTest`) failed. With `testcontainers.reuse.enable=true` the rows
+     survived across Maven runs (6 runs → 6 rows).
+- Workaround used: `TableSnapshot` (`src/test/.../base/TableSnapshot.java`) snapshots the tables a test
+  family writes and restores them by id after each test. The report base covers `vat_rate`,
+  `expense_type` and `expense_report`. A `TransactionTemplate` wraps the lazy fixtures. A one-off delete
+  removed the 6 leaked rows from the local container.
+- Evidence: log § 2 (S7, S10, S14, cross-class leak); commit `d50953f`.
+- Impact: the correct fix for portability introduces a failure mode, leaked state, that is invisible
+  per class and persists across runs locally.
+- Suggested Vaadin/product improvement: the skill's `@Transactional` guidance could say "list everything
+  the tests write, service calls included, snapshot it per family, and finish with a full-suite run on
+  both tools".
+- Owner / next step: ADR-0027 records snapshot-and-restore as the layer-3 isolation rule.
+
+### F-089 — The bundled `resolve-migration-markers` skill covers the markers but not the patterns that actually broke
+- Date: 2026-11-18
+- Area: AI
+- Severity: Low
+- Task being attempted: following the skill as shipped (vendored unmodified, `.agents/skills/`).
+- Expected vs actual: the marker reference was accurate for every marker kind it lists. The step 6
+  failures came from what it does not cover: `.visible()` for absence (F-087), checkboxes are set, not
+  clicked (F-087), `@Transactional` across a class family and full-suite verification (F-088), a test
+  that expected `navigate` to throw (it no longer does; assert the not-found page), subclasses of Core Set
+  components (try the superclass Wrapper plus a filter before writing one), and
+  `vaadin.testing.browserless.route-errors-to-session` (documented only in adapter Javadoc). Its
+  "search the project for `@UnifiedComponent(`" step cannot find the library's own Wrappers.
+- Workaround used: read the adapter and API sources directly.
+- Evidence: log § 2, S1–S14.
+- Impact: an agent following the skill to the letter would have stopped at a Browserless-only suite
+  (F-083), or written about 50 unnecessary Wrappers.
+- Suggested Vaadin/product improvement: add those rules to the skill; point its Wrapper search at the
+  Core Set list too.
+- Owner / next step: upstream issue with the S-list from the log.
