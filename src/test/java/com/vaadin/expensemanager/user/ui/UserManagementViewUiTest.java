@@ -1,5 +1,6 @@
 package com.vaadin.expensemanager.user.ui;
 
+import com.vaadin.expensemanager.base.ui.AbstractUiTest;
 import java.util.List;
 import java.util.Set;
 
@@ -20,15 +21,11 @@ import com.vaadin.testing.unified.component.UnifiedDialog;
 import com.vaadin.testing.unified.component.UnifiedGrid;
 import com.vaadin.testing.unified.component.UnifiedRadioButtonGroup;
 import com.vaadin.testing.unified.component.UnifiedTextField;
-import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
-import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,20 +42,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * so the class runs on every Testing Tool (a browser's request threads never see
  * a test transaction).
  */
-@UnifiedSpringBootTest
-@ActiveProfiles("test")
-class UserManagementViewUiTest {
+class UserManagementViewUiTest extends AbstractUiTest {
 
     private static final String ADMIN_EMAIL = "admin@vaadin.com";
     private static final String REVOKED_EMAIL = "revoked.admin@vaadin.com";
-
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
 
     /** Resolves the signed-in user for {@code navEntryLabels()}. */
     @Autowired

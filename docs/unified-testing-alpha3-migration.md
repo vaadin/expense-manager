@@ -361,6 +361,43 @@ a mock environment there would remove ≈ 10 s of the 11.5 s regression on this 
 `@UnifiedSpringBootTest` offers no way to opt out: it aliases only `properties`, `classes` and `args`, not
 `webEnvironment`.
 
+### 3b. After the follow-up: one shared UI-test base
+
+Every UI test now extends `base/ui/AbstractUiTest`, which declares `@UnifiedSpringBootTest`,
+`@ActiveProfiles("test")` and the one `@ServiceConnection` Postgres container. The container field had been
+declared in each of 9 root classes, and Spring's context cache treats each declaration as a different
+configuration. Now there is **1 context and 1 Tomcat start for the whole UI suite** (was 9 of each). Same
+protocol as above.
+
+| Class | Tests | Before migration (s) | After, 9 contexts (s) | **After, 1 context (s)** | Range (s) |
+|---|---:|---:|---:|---:|---|
+| AllowanceRatesViewUiTest ¹ | 18 | 6.948 | 8.519 | **8.068** | 7.987–8.411 |
+| ApprovalAccessUiTest | 4 | 0.660 | 1.781 | **0.155** | 0.147–0.157 |
+| ApprovalQueueViewUiTest | 8 | 0.400 | 0.364 | **0.382** | 0.329–0.390 |
+| DashboardViewUiTest | 3 | 0.641 | 1.662 | **0.051** | 0.051–0.054 |
+| ErrorDialogFlowUiTest | 3 | 0.604 | 1.710 | **0.128** | 0.118–0.152 |
+| ExpenseTypeViewUiTest | 11 | 0.388 | 0.538 | **0.528** | 0.517–0.542 |
+| MyReportsViewUiTest | 21 | 0.685 | 0.817 | **0.830** | 0.807–0.844 |
+| NavigationShellUiTest | 10 | 0.719 | 1.809 | **0.215** | 0.213–0.220 |
+| PageHeaderUiTest | 3 | 0.612 | 1.721 | **0.119** | 0.118–0.124 |
+| ReferenceConfigViewUiTest | 6 | 0.189 | 0.259 | **0.241** | 0.219–0.244 |
+| ReportDetailViewUiTest | 104 | 6.746 | 8.643 | **6.904** | 6.783–7.331 |
+| UserManagementViewUiTest | 10 | 1.132 | 2.256 | **0.478** | 0.477–0.511 |
+| VatRateViewUiTest | 4 | 0.596 | 1.722 | **0.147** | 0.145–0.170 |
+| **Sum of class times** | **205** | **20.060** | **32.079** | **18.553** | 18.068–18.686 |
+| **Maven wall clock** (measured runs) | | 22.0–22.9 | 34.0–34.3 | **20.0–20.6** | |
+
+¹ The first class to run pays for the single context start (≈ 5.0 s here, Tomcat included).
+
+**Net result: the migrated suite is now 7.5 % faster on Browserless than the original Browserless Test
+suite** (18.6 s vs 20.1 s class time; 20.5 s vs 22.2 s wall). Against the 9-context state it is −42 %. The
+original suite also started 9 contexts, but without a server each start cost only ≈ 0.45 s. One context
+with a server (≈ 5 s, all fixed costs included) beats nine without. The per-test cost of `TableSnapshot`
+(≈ +8 ms per `ReportDetailViewUiTest` test) remains and is the only thing left above the baseline per
+class.
+
+Verification on this commit: `./mvnw verify` 583 / 583, and `*UiTest` on Playwright 205 / 205.
+
 For scale, on Playwright `ReportDetailViewUiTest` alone took ≈ 118 s (single run, step 6) against
 8.6 s here. The Playwright suite was not benchmarked with this protocol.
 
@@ -398,8 +435,8 @@ hand-written part of this migration was roughly the size of the alpha2 port's, b
 compiling-in-one-fix, all-green-on-Browserless baseline and ended with fewer Wrappers and no tool-specific
 tests.
 
-The one place alpha2 did better is Browserless speed: its single shared base class gave one Spring context
-(27 s against 34 s). Carrying that over is the main follow-up (F-086).
+The one place alpha2 did better was Browserless speed: its single shared base class gave one Spring
+context (27 s against 34 s). That is now carried over (§ 3b): 20.5 s.
 
 ## 5. Verdict
 
@@ -409,7 +446,8 @@ The one place alpha2 did better is Browserless speed: its single shared base cla
 - **Skill efficiency:** 170 / 170 markers resolved with its guidance, none kept. Its marker reference was
   right every time it applied. Its gaps (F-089) are the patterns that made 8 of 16 files need a second
   run.
-- **Runtime:** Browserless +60 %, ~91 % of it from `@UnifiedSpringBootTest`'s `RANDOM_PORT` times 9
-  contexts (F-086); the Unified API's own per-test overhead is within noise.
+- **Runtime:** right after the migration, Browserless was +60 %, ~91 % of it from `@UnifiedSpringBootTest`'s
+  `RANDOM_PORT` times 9 contexts (F-086). With one shared base (§ 3b) it is **7.5 % faster than before the
+  migration**. The Unified API's own per-test overhead is within noise.
 - **Outcome:** every UI test now also runs in a real browser, the thing ADR-0012 ruled out for V1.
   ADR-0027 (Proposed) records the decision. It cannot be accepted or reach CI until alpha3 is published.

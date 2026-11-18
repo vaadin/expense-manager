@@ -3053,14 +3053,16 @@ Deployment/Observability · UX-spec
   context). This app has **9** distinct test contexts, because each standalone `*UiTest` declares its own
   `@ServiceConnection` container, which multiplies the cost. The alpha2 port had one shared base and one
   context.
-- Workaround used: none yet.
+- Workaround used: one shared base, `base/ui/AbstractUiTest`, holding the annotations and the only
+  `@ServiceConnection` container, so every UI test shares one context. Result: 18.6 s class time and
+  20.5 s wall, **7.5 % faster than the pre-migration Browserless suite** (log § 3b).
 - Evidence: log § 3 (per-class table and startup/body split); `UnifiedSpringBootTest.java` in
   `unified-test-spring-0.1.0-alpha3-sources.jar`.
 - Impact: the developer loop, Browserless, gets slower purely from the annotation.
 - Suggested Vaadin/product improvement: pick the web environment from the Testing Tool (mock for
   Browserless), or expose `webEnvironment` as an alias.
-- Owner / next step: upstream issue. Locally, one shared UI-test base class (a single context) would win
-  back most of it; tracked as a follow-up in the ADR.
+- Owner / next step: fixed locally by the shared base. Upstream issue still worth filing: a suite whose
+  tests need different contexts pays a server start per context on Browserless.
 
 ### F-087 — The same Unified call silently means different things per Testing Tool in three places
 - Date: 2026-11-18

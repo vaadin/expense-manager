@@ -1,5 +1,6 @@
 package com.vaadin.expensemanager.reference.ui;
 
+import com.vaadin.expensemanager.base.ui.AbstractUiTest;
 import java.util.List;
 
 import com.vaadin.expensemanager.base.TableSnapshot;
@@ -8,15 +9,11 @@ import com.vaadin.expensemanager.reference.ReferenceDataService;
 import com.vaadin.flow.spring.security.AuthenticationContext;
 import com.vaadin.testing.unified.component.UnifiedButton;
 import com.vaadin.testing.unified.component.UnifiedGrid;
-import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Shared base for the reference-data settings-screen view tests (pyramid layer 3,
@@ -26,9 +23,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  *
  * <p>Consolidates what the screens share so no test repeats it:
  * <ul>
- *   <li>The <strong>singleton {@link PostgreSQLContainer}</strong> mirrors
- *       {@code AbstractIntegrationTest} (F-008). Testcontainers reuse means every
- *       test shares one Docker container.</li>
+ *   <li>The container and test configuration come from {@link AbstractUiTest},
+ *       shared by every UI test so they run on one Spring context.</li>
  *   <li><strong>A {@link TableSnapshot} of {@code vat_rate} and
  *       {@code expense_type}</strong>, taken before each test and restored after
  *       it. The add/edit/reorder/deactivate tests commit what they write — a
@@ -38,17 +34,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  *       query behind an admin's UI action.</li>
  * </ul>
  */
-@UnifiedSpringBootTest
-@ActiveProfiles("test")
-abstract class AbstractReferenceDataViewUiTest {
-
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
+abstract class AbstractReferenceDataViewUiTest extends AbstractUiTest {
 
     /** Resolves the signed-in user for {@code navEntryLabels()}. */
     @Autowired

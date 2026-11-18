@@ -1,5 +1,6 @@
 package com.vaadin.expensemanager.approval.ui;
 
+import com.vaadin.expensemanager.base.ui.AbstractUiTest;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,14 +22,9 @@ import com.vaadin.expensemanager.reference.VatRate;
 import com.vaadin.expensemanager.reference.VatRateRepository;
 import com.vaadin.expensemanager.user.UserRepository;
 import com.vaadin.testing.unified.UnifiedPage;
-import com.vaadin.testing.unified.component.UnifiedMain;
-import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Shared base for the approval view tests (pyramid layer 3, ADR-0012) —
@@ -44,20 +40,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * repository + aggregate (bypassing the owner-scoped service, to reach any owner
  * and any status) and cleaned up explicitly in {@link #cleanUp()}.
  *
- * <p>The singleton Testcontainers Postgres is re-declared (F-008) and attaches to
- * the same container via {@code .withReuse(true)}.
+ * <p>The container and test configuration come from {@link AbstractUiTest}, shared by
+ * every UI test so they run on one Spring context.
  */
-@UnifiedSpringBootTest
-@ActiveProfiles("test")
-abstract class AbstractApprovalViewUiTest {
-
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
+abstract class AbstractApprovalViewUiTest extends AbstractUiTest {
 
     @Autowired
     protected ExpenseReportRepository reportRepository;
@@ -73,10 +59,6 @@ abstract class AbstractApprovalViewUiTest {
 
     private final List<Long> createdReportIds = new ArrayList<>();
 
-    /** The routed view's column inside {@code MainLayout}, for what the page says. */
-    protected static UnifiedMain view(UnifiedPage page) {
-        return page.find(UnifiedMain.class).withClassName("app-shell__content");
-    }
 
     @AfterEach
     void cleanUp() {

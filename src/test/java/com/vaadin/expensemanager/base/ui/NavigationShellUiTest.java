@@ -14,13 +14,9 @@ import com.vaadin.testing.unified.UnifiedPage;
 import com.vaadin.testing.unified.component.UnifiedHeader;
 import com.vaadin.testing.unified.component.UnifiedMenuBar;
 import com.vaadin.testing.unified.component.UnifiedNav;
-import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
-import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,22 +36,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 900px column and the 360px behaviour are all visual, and are verified in the
  * browser instead (see {@code docs/manual-verification.md}).
  *
- * <p>Boots on the same singleton {@link PostgreSQLContainer} pattern as
- * {@code AbstractIntegrationTest}. The shell is read through the Core Set
+ * <p>Runs on the shared {@link AbstractUiTest} context. The shell is read through the Core Set
  * Wrappers of what {@code AppHeader} renders: a {@code <header>} with the
  * {@code app-header} class, its {@code <nav>}, and the account {@code MenuBar}.
  */
-@UnifiedSpringBootTest
-@ActiveProfiles("test")
-class NavigationShellUiTest {
-
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
+class NavigationShellUiTest extends AbstractUiTest {
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)

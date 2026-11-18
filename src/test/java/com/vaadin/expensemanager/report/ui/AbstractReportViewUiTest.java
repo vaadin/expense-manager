@@ -1,5 +1,6 @@
 package com.vaadin.expensemanager.report.ui;
 
+import com.vaadin.expensemanager.base.ui.AbstractUiTest;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,17 +22,12 @@ import com.vaadin.expensemanager.reference.VatRateDto;
 import com.vaadin.expensemanager.user.UserRepository;
 import com.vaadin.expensemanager.base.TableSnapshot;
 import com.vaadin.testing.unified.UnifiedPage;
-import com.vaadin.testing.unified.component.UnifiedMain;
-import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 
@@ -40,8 +36,8 @@ import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
  * {@link MyReportsViewUiTest} and {@link ReportDetailViewUiTest}. Unified UI
  * tests: they run on every Testing Tool.
  *
- * <p>Mirrors {@code AbstractReferenceDataViewUiTest}: the singleton
- * Testcontainers Postgres (F-008), and a {@link TableSnapshot} of
+ * <p>Mirrors {@code AbstractReferenceDataViewUiTest}: the shared
+ * {@link AbstractUiTest} context, and a {@link TableSnapshot} of
  * {@code expense_report} — plus the reference tables a test may add a type or rate
  * to — taken before each test and restored after it, so the reports a test seeds —
  * or the view saves — are deleted again (their lines, trips, receipts and status
@@ -51,17 +47,7 @@ import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
  * {@link ExpenseReportService} handle seeds the current user's reports and
  * asserts persisted state behind a UI action.
  */
-@UnifiedSpringBootTest
-@ActiveProfiles("test")
-abstract class AbstractReportViewUiTest {
-
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
+abstract class AbstractReportViewUiTest extends AbstractUiTest {
 
     @Autowired
     protected ExpenseReportService service;
@@ -96,10 +82,6 @@ abstract class AbstractReportViewUiTest {
         reports.restore();
     }
 
-    /** The routed view's column inside {@code MainLayout}, for what the page says. */
-    protected static UnifiedMain view(UnifiedPage page) {
-        return page.find(UnifiedMain.class).withClassName("app-shell__content");
-    }
 
     /** The page says {@code text} (retrying until it does). */
     protected static void assertSays(UnifiedPage page, String... texts) {

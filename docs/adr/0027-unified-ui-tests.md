@@ -58,9 +58,12 @@ Result: **all 205 UI tests pass on Browserless and on Playwright**, with no test
   Playwright leg can be added to `tests.yml` then, `continue-on-error` at first.
 - **Vaadin follows the library.** The alpha BOM pins Browserless Test 25.3.2, so the app moved to Vaadin
   25.3.5 first (F-082).
-- **The Browserless loop is 60 % slower** (sum of class times 20 s → 32 s). Almost all of it is
-  `@UnifiedSpringBootTest` starting Tomcat for each of this suite's 9 Spring contexts (F-086). Follow-up:
-  one shared UI-test base, so one context. Upstream: a mock web environment on Browserless.
+- **Every UI test extends `base/ui/AbstractUiTest`**, which holds the test annotations and the one
+  `@ServiceConnection` container. `@UnifiedSpringBootTest` starts an embedded server per Spring context
+  even on Browserless (F-086), so the suite must stay on **one** context. A subclass adding
+  `@MockitoBean`, `@Import` or properties splits it and costs ≈ 1 s more per run. With one context the
+  Browserless loop is 18.6 s of class time, 7.5 % faster than the pre-migration suite (9 contexts:
+  32 s).
 - **A browser run is much slower:** `ReportDetailViewUiTest` takes ≈ 118 s on Playwright against ≈ 9 s on
   Browserless. That is fine for a CI leg, not for the inner loop.
 - **The recipe gets a migration started; it does not finish it.** It left 170 markers and ≈ 440 unmarked

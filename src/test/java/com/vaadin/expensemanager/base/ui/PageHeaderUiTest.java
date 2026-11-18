@@ -12,13 +12,9 @@ import com.vaadin.testing.unified.UnifiedPage;
 import com.vaadin.testing.unified.component.UnifiedButton;
 import com.vaadin.testing.unified.component.UnifiedContainer;
 import com.vaadin.testing.unified.component.UnifiedParagraph;
-import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
-import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,17 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * decidable from a component tree on every Testing Tool. They are the visual verification's, and this
  * class stops at the class names and the tokens the two gaps name.
  */
-@UnifiedSpringBootTest
-@ActiveProfiles("test")
-class PageHeaderUiTest {
-
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
+class PageHeaderUiTest extends AbstractUiTest {
 
     /**
      * The create button's label, from the frame. The {@code h2} beside it carries

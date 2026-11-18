@@ -1,5 +1,6 @@
 package com.vaadin.expensemanager.allowance.ui;
 
+import com.vaadin.expensemanager.base.ui.AbstractUiTest;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -27,17 +28,13 @@ import com.vaadin.testing.unified.component.UnifiedMenuBar;
 import com.vaadin.testing.unified.component.UnifiedSpan;
 import com.vaadin.testing.unified.component.UnifiedTabs;
 import com.vaadin.testing.unified.component.UnifiedTextField;
-import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.test.context.support.WithUserDetails;
-import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,17 +57,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * overlay. This class asserts the structure and the behaviour; appearance goes
  * to visual verification against the frame.
  */
-@UnifiedSpringBootTest
-@ActiveProfiles("test")
-class AllowanceRatesViewUiTest {
-
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
+class AllowanceRatesViewUiTest extends AbstractUiTest {
 
     /** Resolves the signed-in user for the tab bar's access filter. */
     @Autowired

@@ -5,13 +5,9 @@ import com.vaadin.flow.component.html.H2;
 import com.vaadin.testing.unified.UnifiedPage;
 import com.vaadin.testing.unified.component.UnifiedMenuBar;
 import com.vaadin.testing.unified.component.UnifiedParagraph;
-import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
-import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,17 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * logout action. Authenticates as the seeded admin and plain user via
  * {@link WithUserDetails} — the same records the form-stub logs in.
  */
-@UnifiedSpringBootTest
-@ActiveProfiles("test")
-class DashboardViewUiTest {
-
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES =
-            new PostgreSQLContainer("postgres:17-alpine").withReuse(true);
-
-    static {
-        POSTGRES.start();
-    }
+class DashboardViewUiTest extends AbstractUiTest {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
