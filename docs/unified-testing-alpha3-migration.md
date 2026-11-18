@@ -43,6 +43,32 @@ Maven wall clock, measured runs: 22.9 s / 22.2 s / 22.0 s. The warm-up took 21.9
 
 _Steps 3–4. Measured on the raw recipe output, before any hand edit._
 
+### 1a. Build recipe — `MigrateBrowserlessBuild` + `AddPlaywrightAdapter`
+
+```
+./mvnw -U org.openrewrite.maven:rewrite-maven-plugin:run \
+  -Drewrite.recipeArtifactCoordinates=org.vaadin.addons:unified-test-rewrite:0.1.0-alpha3 \
+  -Drewrite.activeRecipes=org.vaadin.addons.unified.rewrite.MigrateBrowserlessBuild,org.vaadin.addons.unified.rewrite.AddPlaywrightAdapter
+```
+
+The run took 22 s and succeeded. OpenRewrite estimates the time it saved at 20 min.
+
+| Measure | Result |
+|---|---|
+| Files changed | `pom.xml` only, +22 / −0 |
+| Added | `unified-test-bom` 0.1.0-alpha3 (import, after `vaadin-bom`); test deps `unified-test-browserless`, `unified-test-playwright`, `unified-test-spring`, all versionless and managed by the BOM |
+| Removed | nothing. The project has no direct `browserless-test`, `-junit*`, `-shared` or `vaadin-testbench-unit*` dependency. `browserless-test-spring` is kept, as the recipe documents |
+| Spring detection | `AddSpringIntegrationToSpringBootProjects` added `unified-test-spring` correctly |
+| Resolved versions | `browserless-test-*` is 25.3.2 everywhere, with no conflict between `vaadin-bom` 25.3.5 and `unified-test-bom`. Playwright 1.63.0 comes through Dramafinder 2.2.0 |
+| Hand edits needed | **none** |
+| Old tests still green on the new build | 205 / 205 UI tests pass, 0 fail |
+
+Notes:
+- The recipe places the new dependencies after `testcontainers-postgresql`, between two Testcontainers entries,
+  instead of next to `browserless-test-spring`. This is cosmetic; it was left as the recipe wrote it.
+- The ADR-0012 comment above `spring-security-test` still says "browserless view-security tests". It is still
+  accurate while the tests run on Browserless.
+
 ## 2. Skill efficiency
 
 _Step 6, `resolve-migration-markers`._
