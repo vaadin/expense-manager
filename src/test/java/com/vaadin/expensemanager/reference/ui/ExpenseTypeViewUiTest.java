@@ -3,44 +3,39 @@ package com.vaadin.expensemanager.reference.ui;
 import java.math.BigDecimal;
 
 import com.vaadin.expensemanager.base.ui.DashboardView;
-import com.vaadin.expensemanager.base.ui.LucideIcon;
 import com.vaadin.expensemanager.base.ui.NavGroup;
 import com.vaadin.expensemanager.base.ui.ReferenceTabs;
-import com.vaadin.expensemanager.reference.ExpenseTypeDto;
-import com.vaadin.expensemanager.reference.VatRateDto;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
-import com.vaadin.flow.component.grid.GridLocator;
+import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.icon.SvgIcon;
-import com.vaadin.testing.unified.RequiresTestingTool;
-import com.vaadin.testing.unified.TestingTool;
 import com.vaadin.testing.unified.UnifiedPage;
-import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedComboBox;
+import com.vaadin.testing.unified.component.UnifiedDialog;
+import com.vaadin.testing.unified.component.UnifiedGenericComponent;
+import com.vaadin.testing.unified.component.UnifiedGrid;
+import com.vaadin.testing.unified.component.UnifiedTabs;
+import com.vaadin.testing.unified.component.UnifiedTextField;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Browserless view test (pyramid layer 3, ADR-0012) for {@link ExpenseTypeView}
+ * Unified view test (pyramid layer 3, ADR-0012) for {@link ExpenseTypeView}
  * — the ADMIN-only expense-type settings screen (issue #22, ADR-0008/0018).
  *
  * <p>Companion to {@link VatRateViewUiTest}; covers this screen's access control
  * and CRUD, plus the behaviours unique to expense types: an editor whose
  * default-rate {@code ComboBox} offers only <em>active</em> VAT rates (the
  * active-options query on the UI), a required default rate, and the
- * <em>optional</em> Lucide glyph a type's report rows draw (#172, ADR-0026). Grid
- * cells are read with {@code getCellText} (revised F-018).
+ * <em>optional</em> Lucide glyph a type's report rows draw (#172, ADR-0026).
+ * Rows are found by their name, not their position, except where the position
+ * is what a test asserts.
  */
 class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
-
-    /** The glyph column leads, as the glyph leads a report row (#172). */
-    private static final int ICON_COL = 0;
-    private static final int NAME_COL = 1;
-    private static final int RATE_COL = 2;
-    private static final int STATUS_COL = 3;
-    private static final int ACTIONS_COL = 4;
 
     // ------------------------------------------------------- access control
 
@@ -48,14 +43,14 @@ class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
     @WithUserDetails("admin@vaadin.com")
     void adminReachesViewWithSeededTypesRendered(UnifiedPage page) {
         page.navigate(ExpenseTypeView.class);
-        var grid = findGrid(ExpenseTypeDto.class);
-        assertThat(columnText(grid, NAME_COL))
-                .containsExactly("Travel allowance", "Taxi/transport", "Accommodation",
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
+        assertThat(grid.column("Name"))
+                .hasCellTexts("Travel allowance", "Taxi/transport", "Accommodation",
                         "Restaurant/meals", "Parking/supplies/goods", "Publications",
                         "Kilometre allowance", "Meal allowance", "Other");
         // Each type renders its seeded default VAT rate.
-        assertThat(grid.getCellText(0, RATE_COL)).isEqualTo("0 %");
-        assertThat(grid.getCellText(3, RATE_COL)).isEqualTo("13.5 %");
+        assertThat(grid.row(0)).hasCellText("Default VAT rate", "0 %");
+        assertThat(grid.row(3)).hasCellText("Default VAT rate", "13.5 %");
     }
 
     /**
@@ -65,18 +60,16 @@ class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void everySeededTypeRendersItsGlyph(UnifiedPage page) {
         page.navigate(ExpenseTypeView.class);
-        var grid = findGrid(ExpenseTypeDto.class);
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
 
-        assertThat(glyphOf(page, grid, 0)).isEqualTo("plane");            // Travel allowance
-        assertThat(glyphOf(page, grid, 1)).isEqualTo("car-taxi-front");   // Taxi/transport
-        assertThat(glyphOf(page, grid, 2)).isEqualTo("bed");              // Accommodation
-        assertThat(glyphOf(page, grid, 3)).isEqualTo("utensils");         // Restaurant/meals
-        for (int row = 0; row < grid.size(); row++) {
-            assertThat(glyphOf(page, grid, row))
-                    .as("row %d carries a glyph", row).isNotNull();
+        assertThat(glyph(grid, "Travel allowance")).hasProperty("symbol", "plane");
+        assertThat(glyph(grid, "Taxi/transport")).hasProperty("symbol", "car-taxi-front");
+        assertThat(glyph(grid, "Accommodation")).hasProperty("symbol", "bed");
+        assertThat(glyph(grid, "Restaurant/meals")).hasProperty("symbol", "utensils");
+        for (int row = 0; row < grid.getRowCount(); row++) {
+            assertThat(grid.row(row).cell("Icon").findComponent(SvgIcon.class)).exists();
         }
     }
 
@@ -89,36 +82,21 @@ class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void theGlyphIsOptionalAndAdminChosen(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(ExpenseTypeView.class);
-        int before = findGrid(ExpenseTypeDto.class).size();
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
 
-        findButton().withText("New").click();
-        findTextField().withLabel("Name").setValue("Software licences");
-        findComboBox(VatRateDto.class).withLabel("Default VAT rate").selectItem("25.5 %");
-        findButton().withText("Save").click();
+        addType(page, "Software licences", "25.5 %");
 
-        var grid = findGrid(ExpenseTypeDto.class);
-        assertThat(glyphOf(page, grid, before)).isNull();
-        assertThat(grid.getCellText(before, ICON_COL)).isEqualTo("—");
+        assertThat(glyph(grid, "Software licences")).doesNotExist();
+        assertThat(grid.row().withCellText("Name", "Software licences")).hasCellText("Icon", "—");
 
-        // TODO unified: Component Reference:test(rowActionButton(page, grid, before, ACTIONS_COL, "Edit expense type Software licences")).click(): replace it with a locator that finds the same component
-        browserless.test(rowActionButton(page, grid, before, ACTIONS_COL, "Edit expense type Software licences")).click();
-        findComboBox(LucideIcon.class).withLabel("Icon").selectItem("archive");
-        findButton().withText("Save").click();
+        rowAction(grid, "Name", "Software licences", "Edit expense type Software licences").click();
+        UnifiedDialog editor = page.find(UnifiedDialog.class);
+        editor.find(UnifiedComboBox.class).withLabel("Icon").selectItem("archive");
+        editor.find(UnifiedButton.class).withText("Save").click();
 
-        assertThat(glyphOf(page, findGrid(ExpenseTypeDto.class), before))
-                .isEqualTo("archive");
-    }
-
-    /** The Lucide symbol id the row's Icon cell renders, or {@code null} if none. */
-    private String glyphOf(UnifiedPage page, GridLocator<?> grid, int row) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: find(SvgIcon.class, grid.getCellComponent(row, ICON_COL)).all().stream().findFirst().map(SvgIcon::getSymbol).orElse(null)
-        return browserless.find(SvgIcon.class, grid.getCellComponent(row, ICON_COL))
-                .all().stream().findFirst().map(SvgIcon::getSymbol).orElse(null);
+        assertThat(glyph(grid, "Software licences")).hasProperty("symbol", "archive");
     }
 
     /**
@@ -128,14 +106,11 @@ class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void adminReachesThisRouteThroughTheTabBarRatherThanTheShellMenu(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(ExpenseTypeView.class);
 
-        // TODO unified: Browserless Escape Hatch: $(ReferenceTabs.class).single().getSelectedTab().getElement().getTextRecursively(), no Wrapper for ReferenceTabs: write one (ADR 0003)
-        assertThat(browserless.$(ReferenceTabs.class).single().getSelectedTab().getElement()
-                .getTextRecursively()).isEqualTo("Expense Types");
+        assertThat(page.find(UnifiedTabs.class).withClassName("reference-tabs"))
+                .hasSelectedTab("Expense Types");
         assertThat(navEntryLabels()).doesNotContain("Expense types");
         assertThat(NavGroup.of(ExpenseTypeView.class, "expense-types"))
                 .contains(NavGroup.REFERENCE_TABLES);
@@ -152,12 +127,12 @@ class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void userCannotReachRouteByUrl(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: navigate(ExpenseTypeView.class)
-        assertThatThrownBy(() -> browserless.navigate(ExpenseTypeView.class))
-                .isInstanceOf(Exception.class);
+        page.navigate(ExpenseTypeView.class);
+
+        // Access control answers a denied route with the not-found page, never the grid.
+        assertThat(page.findComponent(H2.class).withText("Page not found")).exists();
+        assertThat(page.find(UnifiedGrid.class)).doesNotExist();
     }
 
     // ------------------------------------------------------------- CRUD: add
@@ -166,88 +141,72 @@ class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
     @WithUserDetails("admin@vaadin.com")
     void addTypeThroughEditorAppendsActiveRow(UnifiedPage page) {
         page.navigate(ExpenseTypeView.class);
-        int before = findGrid(ExpenseTypeDto.class).size();
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
+        assertThat(grid).hasRowCount(9);
 
-        findButton().withText("New").click();
-        findTextField().withLabel("Name").setValue("Software licences");
-        findComboBox(VatRateDto.class).withLabel("Default VAT rate").selectItem("25.5 %");
-        findButton().withText("Save").click();
+        addType(page, "Software licences", "25.5 %");
 
-        var grid = findGrid(ExpenseTypeDto.class);
-        assertThat(grid.size()).isEqualTo(before + 1);
-        assertThat(grid.getCellText(before, NAME_COL)).isEqualTo("Software licences");
-        assertThat(grid.getCellText(before, RATE_COL)).isEqualTo("25.5 %");
-        assertThat(grid.getCellText(before, STATUS_COL)).isEqualTo("Active");
+        assertThat(grid).hasRowCount(10);
+        assertThat(grid.row(9)).hasCellText("Name", "Software licences");
+        assertThat(grid.row(9)).hasCellText("Default VAT rate", "25.5 %");
+        assertThat(grid.row(9)).hasCellText("Status", "Active");
     }
 
     // ------------------------------------------------------------ CRUD: edit
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void editTypeThroughEditorRenamesAndRepointsDefaultRate(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(ExpenseTypeView.class);
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
 
-        // Restaurant/meals is the fourth seeded row (index 3).
-        // TODO unified: Component Reference:// Restaurant/meals is the fourth seeded row (index 3).test(rowActionButton(page, findGrid(ExpenseTypeDto.class), 3, ACTIONS_COL, "Edit expense type Restaurant/meals")).click(): replace it with a locator that finds the same component
-        browserless.test(rowActionButton(page, findGrid(ExpenseTypeDto.class), 3, ACTIONS_COL, "Edit expense type Restaurant/meals")).click();
-        findTextField().withLabel("Name").setValue("Restaurant");
-        findComboBox(VatRateDto.class).withLabel("Default VAT rate").selectItem("25.5 %");
-        findButton().withText("Save").click();
+        rowAction(grid, "Name", "Restaurant/meals", "Edit expense type Restaurant/meals").click();
+        UnifiedDialog editor = page.find(UnifiedDialog.class);
+        editor.find(UnifiedTextField.class).withLabel("Name").setValue("Restaurant");
+        editor.find(UnifiedComboBox.class).withLabel("Default VAT rate").selectItem("25.5 %");
+        editor.find(UnifiedButton.class).withText("Save").click();
 
-        var grid = findGrid(ExpenseTypeDto.class);
-        assertThat(columnText(grid, NAME_COL))
-                .contains("Restaurant").doesNotContain("Restaurant/meals");
+        assertThat(grid.row().withCellText("Name", "Restaurant/meals")).doesNotExist();
         // Row 3 kept its position; its default rate is now the repointed one.
-        assertThat(grid.getCellText(3, NAME_COL)).isEqualTo("Restaurant");
-        assertThat(grid.getCellText(3, RATE_COL)).isEqualTo("25.5 %");
+        assertThat(grid.row(3)).hasCellText("Name", "Restaurant");
+        assertThat(grid.row(3)).hasCellText("Default VAT rate", "25.5 %");
     }
 
     // --------------------------------------------------------- CRUD: reorder
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void reorderTypeSwapsRowsAndBoundaryButtonsAreDisabled(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(ExpenseTypeView.class);
-        var grid = findGrid(ExpenseTypeDto.class);
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
 
-        // Travel allowance is first (row 0); "Other" is last (row 8) after the
-        // V10 catch-all addition (issue #87).
-        int last = grid.size() - 1;
-        assertThat(rowActionButton(page, grid, 0, ACTIONS_COL, "Move Travel allowance up")
-                .isEnabled()).isFalse();
-        assertThat(rowActionButton(page, grid, last, ACTIONS_COL, "Move Other down")
-                .isEnabled()).isFalse();
+        // Travel allowance is first; "Other" is last after the V10 catch-all
+        // addition (issue #87).
+        assertThat(rowAction(grid, "Name", "Travel allowance", "Move Travel allowance up"))
+                .isDisabled();
+        assertThat(rowAction(grid, "Name", "Other", "Move Other down")).isDisabled();
 
         // Move Taxi/transport (row 1) up; it swaps with Travel allowance.
-        // TODO unified: Component Reference:// Move Taxi/transport (row 1) up; it swaps with Travel allowance.test(rowActionButton(page, grid, 1, ACTIONS_COL, "Move Taxi/transport up")).click(): replace it with a locator that finds the same component
-        browserless.test(rowActionButton(page, grid, 1, ACTIONS_COL, "Move Taxi/transport up")).click();
+        rowAction(grid, "Name", "Taxi/transport", "Move Taxi/transport up").click();
 
-        var names = columnText(findGrid(ExpenseTypeDto.class), NAME_COL);
-        assertThat(names.get(0)).isEqualTo("Taxi/transport");
-        assertThat(names.get(1)).isEqualTo("Travel allowance");
+        assertThat(grid.row(0)).hasCellText("Name", "Taxi/transport");
+        assertThat(grid.row(1)).hasCellText("Name", "Travel allowance");
     }
 
     // ------------------------------------------------------ CRUD: deactivate
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void deactivateRetainsRowAsInactiveAndExcludesFromActiveOptions(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(ExpenseTypeView.class);
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
 
-        // Publications is the sixth seeded row (index 5).
-        // TODO unified: Component Reference:// Publications is the sixth seeded row (index 5).test(rowActionButton(page, findGrid(ExpenseTypeDto.class), 5, ACTIONS_COL, "Deactivate Publications")).click(): replace it with a locator that finds the same component
-        browserless.test(rowActionButton(page, findGrid(ExpenseTypeDto.class), 5, ACTIONS_COL, "Deactivate Publications")).click();
+        rowAction(grid, "Name", "Publications", "Deactivate Publications").click();
 
-        // Retained in the admin grid at its position, flagged Inactive — never deleted.
-        var grid = findGrid(ExpenseTypeDto.class);
-        assertThat(grid.getCellText(5, NAME_COL)).isEqualTo("Publications");
-        assertThat(grid.getCellText(5, STATUS_COL)).isEqualTo("Inactive");
+        // Retained in the admin grid at its position (the sixth row), flagged
+        // Inactive — never deleted.
+        assertThat(grid.row(5)).hasCellText("Name", "Publications");
+        assertThat(grid.row(5)).hasCellText("Status", "Inactive");
 
         assertThat(service.activeExpenseTypes())
                 .noneMatch(t -> t.name().equals("Publications"));
@@ -267,12 +226,29 @@ class ExpenseTypeViewUiTest extends AbstractReferenceDataViewUiTest {
                 .findFirst().orElseThrow();
         service.setVatRateActive(tenPercent.id(), false);
 
-        findButton().withText("New").click();
+        page.find(UnifiedButton.class).withText("New").click();
 
-        var suggestions = findComboBox(VatRateDto.class)
-                .withLabel("Default VAT rate").getSuggestions();
+        var suggestions = page.find(UnifiedDialog.class).find(UnifiedComboBox.class)
+                .withLabel("Default VAT rate").getItems();
         assertThat(suggestions)
                 .contains("25.5 %", "13.5 %", "0 %")
                 .doesNotContain("10 %");
+    }
+
+    // --------------------------------------------------------------- helpers
+
+    private static void addType(UnifiedPage page, String name, String defaultRate) {
+        page.step("Add expense type " + name, () -> {
+            page.find(UnifiedButton.class).withText("New").click();
+            UnifiedDialog editor = page.find(UnifiedDialog.class);
+            editor.find(UnifiedTextField.class).withLabel("Name").setValue(name);
+            editor.find(UnifiedComboBox.class).withLabel("Default VAT rate").selectItem(defaultRate);
+            editor.find(UnifiedButton.class).withText("Save").click();
+        });
+    }
+
+    /** The Lucide glyph in the named type's Icon cell; its {@code symbol} is the sprite id. */
+    private static UnifiedGenericComponent glyph(UnifiedGrid grid, String typeName) {
+        return grid.row().withCellText("Name", typeName).cell("Icon").findComponent(SvgIcon.class);
     }
 }

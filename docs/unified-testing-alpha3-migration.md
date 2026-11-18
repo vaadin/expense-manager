@@ -29,6 +29,10 @@ Maven wall clock, measured runs: 22.9 s / 22.2 s / 22.0 s. The warm-up took 21.9
 | ApprovalQueueViewUiTest | 8 | 0.400 | 0.385–0.443 |
 | DashboardViewUiTest | 3 | 0.641 | 0.546–0.677 |
 | ErrorDialogFlowUiTest | 3 | 0.604 | 0.580–0.617 |
+| AbstractReferenceDataViewUiTest (base) | 2 | 2 | 0 | ~4 + `implements Locators` | 0 | 1 | — | — | `@Transactional` became a `TableSnapshot` of `vat_rate` and `expense_type` (new helper `base/TableSnapshot`, ~60 lines, generic: deletes added rows and updates changed ones back by id). `rowActionButton(page, GridLocator, rowIndex, colIndex, aria)` became `rowAction(UnifiedGrid, column, rowText, aria)`, so rows are found by their text instead of their position |
+| VatRateViewUiTest | 1 | 1 | 0 | 1 | 0 | 1 | 4/4 | **4/4** | Column scan became `assertThat(grid.column("Rate")).hasCellTexts(..)`, a retrying, exact-order check. Denied route handled as in UserManagement |
+| ReferenceConfigViewUiTest | 4 | 4 | 0 | ~21 | 0 | 1 | 6/6 | **6/6** | `ErrorSummary` found as `UnifiedDiv.withClassName("error-summary")`. `UI.getCurrent().getElement().getTextRecursively()` became `summary.hasTextContaining(..)` (R3 again, unmarked). Disabled boundary buttons use `assertThat(button).isDisabled()` |
+| ExpenseTypeViewUiTest | 7 | 7 | 0 | ~29 | 0 | 1 | 11/11 | **11/11** | The glyph (`SvgIcon.getSymbol()` on the server) became `row.cell("Icon").findComponent(SvgIcon.class)` with `hasProperty("symbol", ..)`. `ReferenceTabs` uses `UnifiedTabs.withClassName("reference-tabs").hasSelectedTab(..)`, so no Wrapper was needed (S5). Rows are found by name. The four "Component Reference" markers with swallowed comments (R2) were resolved and their comments restored by hand. The whole family also passes together with `UserManagementViewUiTest` in one run on both tools, which shows the snapshot restore isolates the tests |
 | ExpenseTypeViewUiTest | 11 | 0.388 | 0.373–0.402 |
 | MyReportsViewUiTest | 21 | 0.685 | 0.679–0.764 |
 | NavigationShellUiTest | 10 | 0.719 | 0.702–0.727 |
@@ -220,6 +224,15 @@ for the markers, so for each class the table separates **markers** from **unmark
   `vaadin.testing.browserless.route-errors-to-session`, documented only in the `BrowserlessAdapter` Javadoc. It is
   global, so it was not switched on. The test view routes its own exception instead. Neither skill mentions the
   setting.
+- **S7, `@Transactional` across a family: one generic helper.** The skill offers "commit test data and clean
+  up" only per test. For a base class whose subclasses add, rename, reorder and deactivate rows, a per-test
+  cleanup would be long and fragile. A snapshot of the two tables, taken in `@BeforeEach` and restored by id in
+  `@AfterEach`, covered all 21 tests and needed no per-test code. The skill could point at this pattern; it is
+  what makes the "run everywhere" outcome affordable.
+- **S8, the skill's preference for visible names over positions improved these tests.** The Browserless
+  originals addressed rows by index ("Restaurant/meals is the fourth seeded row (index 3)"). The Unified forms find
+  the row by its text and keep an index only where position is the claim being tested (reorder, "kept its
+  position").
 
 ## 3. Browserless runtime — after
 
