@@ -146,6 +146,27 @@ in `ErrorDialogFlowUiTest`. The 58 skips are expected.
 
 _Wrong rewrites found later, during step 6, are added here._
 
+- **R4, recipe: "no Wrapper for X" for components alpha3 does wrap.** `unified-test-api` 0.1.0-alpha3 ships
+  `UnifiedMenuBar`, `UnifiedDiv`, `UnifiedSpan` and `UnifiedUpload` (`@UnifiedComponent(MenuBar.class)`, ...).
+  The recipe still marks those components `no Wrapper for MenuBar/Div/Span/Upload: write one (ADR 0003)`.
+  That is **11 of the 57** "no Wrapper" markers. Following them literally means writing a Wrapper that already
+  exists. The skill does say "look for an existing Wrapper first", but it says to search the project for
+  `@UnifiedComponent(`, and the library's own Wrappers are in a jar, so that search misses them.
+- **R5, recipe: the Browserless `Locators` mixin is neither migrated nor marked.** The recipe converts the
+  `SpringBrowserlessTest` base-class API (`navigate`, `$`, `test`, `getCurrentView`) into Escape Hatch calls plus
+  markers. It leaves the fluent locator mixin `com.vaadin.browserless.locator.Locators` untouched:
+  `findGrid(..)`, `findTextField()`, `findComboBox(..)`, `findButton()`, `GridLocator`, ... It also leaves direct
+  `UI.getCurrent()` / `VaadinSession.getCurrent()` calls (see R3). 4 types still `implements Locators`
+  (`AbstractReportViewUiTest`, `AbstractApprovalViewUiTest`, `AbstractReferenceDataViewUiTest`,
+  `UserManagementViewUiTest`, and through the bases every subclass), which leaves **about 440 Browserless-only
+  lines with no marker**: `ReportDetailViewUiTest` 287, `AllowanceRatesViewUiTest` 37,
+  `UserManagementViewUiTest` 31, `ExpenseTypeViewUiTest` 29, `ReferenceConfigViewUiTest` 21,
+  `ApprovalQueueViewUiTest` 19, others under 10. (Counted by grepping lines that call a `Locators` method,
+  `GridLocator`, `UI.getCurrent` or `VaadinSession.getCurrent`, so it is approximate.)
+  **The 170 markers therefore understate the remaining work by roughly 3x.** `UserManagementViewUiTest` has
+  3 markers and about 31 unmarked lines. The class-level `@RequiresTestingTool(BROWSERLESS)` keeps all of this
+  green, so nothing in a test run reveals it.
+
 ### 1c. Test configuration — none needed
 
 The alpha2 port needed `src/test/resources/junit-platform.properties` with
@@ -162,7 +183,22 @@ So **no file was added**: one migration step fewer than alpha2. The tool is stil
 
 ## 2. Skill efficiency
 
-_Step 6, `resolve-migration-markers`._
+_Step 6, `resolve-migration-markers`, followed class by class._
+
+**Scope (user decision):** full portability. Besides the markers, step 6 also converts the unmarked `Locators`
+code (R5) and, where feasible, replaces `@Transactional` with committed data plus cleanup. The skill only asks
+for the markers, so for each class the table separates **markers** from **unmarked lines converted**.
+
+| Class | Markers | Resolved | Kept | Unmarked lines converted | Wrappers written | Attempts until green | Browserless | Playwright | Notes |
+|---|---:|---:|---:|---:|---:|---:|---|---|---|
+| DashboardViewUiTest | 3 | 3 | 0 | 0 | 0 | 1 | 3/3 | **3/3** | `@RequiresTestingTool` removed from all 3 tests. `UnifiedMenuBar` used despite the marker (R4). `findComponent(H2.class)` for the greeting, since there is no heading Wrapper |
+
+**Skill and API observations**
+
+- **S1, API gap: `UnifiedMenuBar` has no assertion.** `getItems(..)` and `isItemEnabled(..)` are immediate
+  getters, so the account-menu check reads once without retrying, and `user-steps.txt` shows only
+  `open Dashboard`. The skill says a check that leaves no `see` line is "a test that does less than asked", but
+  there is no MenuBar assertion to write instead.
 
 ## 3. Browserless runtime — after
 

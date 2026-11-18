@@ -1,11 +1,10 @@
 package com.vaadin.expensemanager.base.ui;
 
 import com.vaadin.expensemanager.user.LocalUserSeeder;
-import com.vaadin.flow.component.menubar.MenuBar;
-import com.vaadin.testing.unified.RequiresTestingTool;
-import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.flow.component.html.H2;
 import com.vaadin.testing.unified.UnifiedPage;
-import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.component.UnifiedMenuBar;
+import com.vaadin.testing.unified.component.UnifiedParagraph;
 import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
 import org.junit.jupiter.api.Test;
@@ -14,6 +13,7 @@ import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -40,30 +40,24 @@ class DashboardViewUiTest {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void adminSeesAdminGreetingAndContent(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: navigate(DashboardView.class)
-        var dashboard = browserless.navigate(DashboardView.class);
+        page.navigate(DashboardView.class);
 
-        var text = textOf(dashboard);
-        assertThat(text).contains("Welcome, Expense Admin");
-        assertThat(text).contains("administrator");
-        assertThat(text).doesNotContain("signed in as a user");
+        assertThat(page.findComponent(H2.class).withTextContaining("Welcome"))
+                .hasText("Welcome, Expense Admin");
+        assertThat(roleNote(page, "administrator")).exists();
+        assertThat(roleNote(page, "signed in as a user")).doesNotExist();
     }
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void userSeesUserGreetingAndContent(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: navigate(DashboardView.class)
-        var dashboard = browserless.navigate(DashboardView.class);
+        page.navigate(DashboardView.class);
 
-        var text = textOf(dashboard);
-        assertThat(text).contains("Welcome, Demo User");
-        assertThat(text).contains("signed in as a user");
-        assertThat(text).doesNotContain("administrator");
+        assertThat(page.findComponent(H2.class).withTextContaining("Welcome"))
+                .hasText("Welcome, Demo User");
+        assertThat(roleNote(page, "signed in as a user")).exists();
+        assertThat(roleNote(page, "administrator")).doesNotExist();
     }
 
     /**
@@ -73,28 +67,19 @@ class DashboardViewUiTest {
      */
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void headerShowsIdentityAndLogout(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(DashboardView.class);
 
-        // TODO unified: Browserless Escape Hatch: $(MenuBar.class).all().stream().flatMap(bar -> bar.getItems().stream()).flatMap(item -> item.getSubMenu().getItems().stream()).toList(), no Wrapper for MenuBar: write one (ADR 0003)
-        var accountMenu = browserless.$(MenuBar.class).all().stream()
-                .flatMap(bar -> bar.getItems().stream())
-                .flatMap(item -> item.getSubMenu().getItems().stream())
-                .toList();
+        // The avatar trigger has no text; its aria-label is its name.
+        String trigger = "Account menu for Demo User";
+        UnifiedMenuBar account = page.find(UnifiedMenuBar.class).withItem(trigger);
 
-        assertThat(accountMenu).extracting(item -> item.getElement().getTextRecursively())
-                .contains("Demo User", "Sign out");
-
-        var signOut = accountMenu.stream()
-                .filter(item -> "Sign out".equals(item.getElement().getTextRecursively()))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("No 'Sign out' item in the shell"));
-        assertThat(signOut.isEnabled()).isTrue();
+        assertThat(account.getItems(trigger)).contains("Demo User", "Sign out");
+        assertThat(account.isItemEnabled(trigger, "Sign out")).isTrue();
     }
 
-    private static String textOf(DashboardView root) {
-        return root.getElement().getTextRecursively();
+    /** The dashboard's role-specific paragraph, by a phrase only that role's note has. */
+    private static UnifiedParagraph roleNote(UnifiedPage page, String phrase) {
+        return page.find(UnifiedParagraph.class).withTextContaining(phrase);
     }
 }
