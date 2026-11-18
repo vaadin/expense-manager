@@ -297,4 +297,69 @@ reports), plus a one-off delete of the 6 rows from the reused local container.
 
 ## 3. Browserless runtime — after
 
-_Step 7. Same command and protocol as the baseline._
+_Step 7._ Same machine, JDK, command (`./mvnw -q -o test -Dtest='*UiTest'`, Browserless being the default)
+and protocol as the baseline: one warm-up run and 3 measured runs. The same Vaadin 25.3.5 / Spring Boot 4.1.1;
+only the test API differs.
+
+Maven wall clock, measured runs: 34.0 s / 34.2 s / 34.3 s. The warm-up took 36.8 s. **Before: 22.0–22.9 s, so
++12 s, +54 %.**
+
+| Class | Tests | Before median (s) | After median (s) | After range (s) | Δ |
+|---|---:|---:|---:|---|---:|
+| AllowanceRatesViewUiTest | 18 | 6.948 | 8.519 | 8.238–8.678 | +23 % |
+| ApprovalAccessUiTest | 4 | 0.660 | 1.781 | 1.778–1.794 | +170 % |
+| ApprovalQueueViewUiTest | 8 | 0.400 | 0.364 | 0.358–0.372 | −9 % |
+| DashboardViewUiTest | 3 | 0.641 | 1.662 | 1.626–1.710 | +159 % |
+| ErrorDialogFlowUiTest | 3 | 0.604 | 1.710 | 1.615–1.742 | +183 % |
+| ExpenseTypeViewUiTest | 11 | 0.388 | 0.538 | 0.524–0.546 | +39 % |
+| MyReportsViewUiTest | 21 | 0.685 | 0.817 | 0.817–1.035 | +19 % |
+| NavigationShellUiTest | 10 | 0.719 | 1.809 | 1.777–1.824 | +152 % |
+| PageHeaderUiTest | 3 | 0.612 | 1.721 | 1.696–1.917 | +181 % |
+| ReferenceConfigViewUiTest | 6 | 0.189 | 0.259 | 0.240–0.267 | +37 % |
+| ReportDetailViewUiTest | 104 | 6.746 | 8.643 | 8.615–8.817 | +28 % |
+| UserManagementViewUiTest | 10 | 1.132 | 2.256 | 2.183–2.555 | +99 % |
+| VatRateViewUiTest | 4 | 0.596 | 1.722 | 1.715–1.879 | +189 % |
+| **Sum of class times** | **205** | **20.060** | **32.079** | 31.897–32.143 | **+60 %** |
+
+Spread between runs stays small (≈ 1 %), so the difference is not noise. **Every class except
+`ApprovalQueueViewUiTest` is above the 10 % flag.**
+
+### Where the time goes
+
+The table conflates two things. The first test class on each Spring context pays for starting that context, and
+surefire counts it in that class's time. Both runs start the same **9** contexts (one per distinct test
+configuration), so the split below uses each run's own `Started <Class> in N seconds` log lines (medians of the
+3 runs):
+
+| | Before (s) | After (s) | Δ |
+|---|---:|---:|---:|
+| Spring context startup (9 contexts) | 7.06 | 17.51 | **+10.45 (+148 %)** |
+| Test bodies (class time − startup) | 13.26 | 14.29 | **+1.03 (+7.8 %)** |
+| Total | 20.32 | 31.80 | +11.48 |
+
+**1. Context startup: 91 % of the regression.** `@UnifiedSpringBootTest` is meta-annotated
+`@SpringBootTest(webEnvironment = RANDOM_PORT)`, unconditionally. Every context therefore starts an embedded
+Tomcat and initialises the Vaadin servlet even when the run is Browserless, which needs neither. The logs show it:
+`Tomcat started on port` appears 0 times before and 9 times after. Each context goes from ≈ 0.45 s to ≈ 1.55 s.
+`browserless-test-spring` used the default mock web environment. This is a fixed cost per *context*, not per test:
+it hits most the small classes that start their own context (Dashboard, PageHeader, ErrorDialogFlow,
+NavigationShell, VatRate, ApprovalAccess: +1.0–1.1 s each), and not at all the classes that reuse their base's
+context (ApprovalQueue, ExpenseType, ReferenceConfig, MyReports). Ruled out on the way: route discovery. Setting
+one shared `vaadin.testing.browserless.view-packages=com.vaadin.expensemanager`, so every class scans the same
+package set, changed nothing (31.2 s).
+
+**2. Test bodies: +7.8 %, concentrated in the classes that replaced `@Transactional`.** `ReportDetailViewUiTest`
++0.83 s over 104 tests (≈ 8 ms per test), `ExpenseTypeViewUiTest` +0.15 s, `ReferenceConfigViewUiTest`
++0.07 s, `MyReportsViewUiTest` +0.13 s. These are the classes that snapshot and restore tables around every test
+(`TableSnapshot`, a few `select *`/`update` round trips) where they used to roll back. Classes without it are flat
+or faster (`AllowanceRatesViewUiTest` body 3.87 → 3.61 s; `ApprovalQueueViewUiTest` 0.40 → 0.36 s). So the
+Unified API's own per-call overhead on Browserless is within noise. What costs is the test-data strategy that
+running on a real browser forces.
+
+**Finding L2 (library):** the web environment should follow the Testing Tool. A Browserless run needs no server;
+a mock environment there would remove ≈ 10 s of the 11.5 s regression on this suite (9 contexts). As it stands,
+`@UnifiedSpringBootTest` offers no way to opt out: it aliases only `properties`, `classes` and `args`, not
+`webEnvironment`.
+
+For scale, the same 205 tests on Playwright take ≈ 3.3 min of class time (`ReportDetailViewUiTest` alone
+≈ 118 s), against ≈ 32 s on Browserless.
