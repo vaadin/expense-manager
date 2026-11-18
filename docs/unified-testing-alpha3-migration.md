@@ -25,6 +25,8 @@ Maven wall clock, measured runs: 22.9 s / 22.2 s / 22.0 s. The warm-up took 21.9
 | Class | Tests | Median (s) | Range (s) |
 |---|---:|---:|---|
 | AllowanceRatesViewUiTest | 18 | 6.948 | 6.570–7.203 |
+| AbstractReportViewUiTest (base) | 1 | 1 | 0 | `implements Locators` | 0 | 2 | — | — | `@Transactional` became a `TableSnapshot` of `expense_report`; lines, trips, receipts and status history follow through `on delete cascade`. New helpers: `view(page)`, `assertSays(..)` (retrying `hasTextContaining`) and `assertDoesNotSay(..)` (`page.waitUntil` on the text being gone). The admin-transition seeds (`seedRejectedReport`, `seedApprovedReport`) walk a lazy association, which only worked inside the old test transaction, so they now run in a `TransactionTemplate` (the extra attempt, S10) |
+| MyReportsViewUiTest | 5 | 5 | 0 | ~7 | 0 | 2 | 21/21 | **21/21** | `getCurrentView()` text became `assertSays`/`assertDoesNotSay` on the view column. The descendant walks for `MetricCard` and `SvgIcon` became `find(UnifiedVerticalLayout.class).withClassName("metric-card")` and `findComponent(SvgIcon.class)` with the `symbol`/`src` properties. "Neither focusable nor clickable" became a walk over `findDescendants("*")` checking tags and `tabindex`. `findDetails().atIndex(1).closeDetails()` became `all().get(0).close()`: the summaries are components, so `withSummaryText` has no text to match (second attempt) |
 | ApprovalAccessUiTest | 4 | 0.660 | 0.653–0.665 |
 | ApprovalQueueViewUiTest | 14 | 14 | 0 | ~19 | 0 | 2 | 8/8 | **8/8** | `getCurrentView().getElement().getTextRecursively()` became `assertThat(view(page)).hasTextContaining(..)`, which retries. The `RouterLink` "no Wrapper" markers became `findComponent(RouterLink.class).withAttribute("href", "review/"+id)`. `UI.getCurrent()` text in the reject dialog became `dialog.hasTextContaining(..)`. Repository checks moved after a UI assertion, so on a browser they run once the server has answered. Second attempt: `.visible()` on every "the action is gone" check (S9) |
 | AllowanceRatesViewUiTest | 16 | 16 | 0 | ~37 | 0 | 2 | 18/18 | **18/18** | `@Transactional` became a `TableSnapshot` of the four rate tables. All 8 `RowActionMenu` markers ("no Wrapper") were resolved with the Core Set `UnifiedMenuBar` (`RowActionMenu extends MenuBar`; its icon-only trigger is named by its `aria-label`), using `withItem("Actions for X")` and `clickItem("Actions for X", "Edit")`. That also works in a grid cell, which retires the `MenuBarTester` workaround for F-082. `ReferenceTabs` uses `UnifiedTabs`, the rate card `UnifiedDiv`/`UnifiedSpan` with class names, and the year selector `withAccessibleName("Year")`. Server-side getters (`getWidth()`, `getHeight()`, `getThemeNames()`, `isAllRowsVisible()`) became inline-style, theme and property reads. Edits now also assert the rendered value before the service read. The extra attempt was my call to a filter that does not exist |
@@ -245,6 +247,11 @@ for the markers, so for each class the table separates **markers** from **unmark
   rather than removes. That is 3 failures in the approval family, on both tools. Neither the recipe (it does not touch
   this code, R5) nor the skill mentions it. A rule worth adding: an absence check on something the view toggles
   needs `.visible()`.
+- **S10, removing `@Transactional` exposes lazy loading in test fixtures.** Seeds that load an aggregate and
+  call a domain method on it (`reportRepository.findById(id)`, then `report.reject(..)`) touched a lazy
+  collection that the old class-level test transaction kept open. Without it they fail with
+  `LazyInitializationException` on *both* tools. The fix is a `TransactionTemplate` around the seed. The skill's
+  "commit test data and clean up" step does not warn that fixture code may depend on the open session.
 
 ## 3. Browserless runtime — after
 

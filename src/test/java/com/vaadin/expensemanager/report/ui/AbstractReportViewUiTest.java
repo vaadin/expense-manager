@@ -7,8 +7,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
-import com.vaadin.browserless.locator.Locators;
 import com.vaadin.expensemanager.report.domain.ExpenseReport;
 import com.vaadin.expensemanager.report.domain.ReportStatus;
 import com.vaadin.expensemanager.report.service.ExpenseLineDto;
@@ -21,35 +19,40 @@ import com.vaadin.expensemanager.reference.ExpenseTypeDto;
 import com.vaadin.expensemanager.reference.ReferenceDataService;
 import com.vaadin.expensemanager.reference.VatRateDto;
 import com.vaadin.expensemanager.user.UserRepository;
-import com.vaadin.testing.unified.RequiresTestingTool;
-import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.expensemanager.base.TableSnapshot;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.component.UnifiedMain;
 import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 
 /**
  * Shared base for the report view tests (pyramid layer 3, ADR-0012) —
- * {@link MyReportsViewUiTest} and {@link ReportDetailViewUiTest}.
+ * {@link MyReportsViewUiTest} and {@link ReportDetailViewUiTest}. Unified UI
+ * tests: they run on every Testing Tool.
  *
  * <p>Mirrors {@code AbstractReferenceDataViewUiTest}: the singleton
- * Testcontainers Postgres (re-declared because {@link SpringBrowserlessTest}
- * occupies the single inheritance slot, F-008), {@code implements Locators} for
- * the fluent typed locator DSL, and {@code @Transactional} rollback so reports a
- * test seeds through the service roll back and leave the shared container clean.
- * The {@link ExpenseReportService} handle seeds the current user's reports and
+ * Testcontainers Postgres (F-008), and a {@link TableSnapshot} of
+ * {@code expense_report} taken before each test and restored after it, so the
+ * reports a test seeds — or the view saves — are deleted again (their lines,
+ * trips, receipts and status history go with them, {@code on delete cascade}).
+ * A browser's request threads never see a test transaction, so the former
+ * {@code @Transactional} rollback only worked on Browserless. The
+ * {@link ExpenseReportService} handle seeds the current user's reports and
  * asserts persisted state behind a UI action.
  */
-// TODO unified: Browserless-only pattern: @Transactional rolls back what the views write only on Browserless; commit test data and clean up to run everywhere (spec 02)
 @UnifiedSpringBootTest
 @ActiveProfiles("test")
-@Transactional
-@RequiresTestingTool(TestingTool.BROWSERLESS)
-abstract class AbstractReportViewUiTest
-        implements Locators {
+abstract class AbstractReportViewUiTest {
 
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES =
@@ -70,6 +73,44 @@ abstract class AbstractReportViewUiTest
 
     @Autowired
     protected ReferenceDataService referenceData;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    /** For seeds that walk a lazy association outside the service layer. */
+    @Autowired
+    protected TransactionTemplate transactions;
+
+    private TableSnapshot reports;
+
+    @BeforeEach
+    void snapshotReports() {
+        reports = TableSnapshot.take(jdbc, "expense_report");
+    }
+
+    @AfterEach
+    void restoreReports() {
+        reports.restore();
+    }
+
+    /** The routed view's column inside {@code MainLayout}, for what the page says. */
+    protected static UnifiedMain view(UnifiedPage page) {
+        return page.find(UnifiedMain.class).withClassName("app-shell__content");
+    }
+
+    /** The page says {@code text} (retrying until it does). */
+    protected static void assertSays(UnifiedPage page, String... texts) {
+        for (String text : texts) {
+            assertThat(view(page)).hasTextContaining(text);
+        }
+    }
+
+    /** The page does not say {@code text} (waiting until it no longer does). */
+    protected static void assertDoesNotSay(UnifiedPage page, String... texts) {
+        for (String text : texts) {
+            page.waitUntil(() -> !view(page).element().getText().contains(text));
+        }
+    }
 
     /** Seeds one DRAFT report owned by the current user; returns its id. */
     protected Long seedReport(LocalDate date, String info) {
@@ -109,10 +150,14 @@ abstract class AbstractReportViewUiTest
      */
     protected Long seedRejectedReport(LocalDate date, String amount, String reason) {
         var id = seedSubmittedReport(date, amount);
-        var admin = userRepository.findByEmail("admin@vaadin.com").orElseThrow();
-        var report = reportRepository.findById(id).orElseThrow();
-        report.reject(admin, reason, Instant.parse("2026-07-14T08:00:00Z"));
-        reportRepository.save(report);
+        // In a transaction of its own: the aggregate's status history is lazy, and
+        // these tests commit what they write (no class-level @Transactional).
+        transactions.executeWithoutResult(status -> {
+            var admin = userRepository.findByEmail("admin@vaadin.com").orElseThrow();
+            var report = reportRepository.findById(id).orElseThrow();
+            report.reject(admin, reason, Instant.parse("2026-07-14T08:00:00Z"));
+            reportRepository.save(report);
+        });
         return id;
     }
 
@@ -124,10 +169,12 @@ abstract class AbstractReportViewUiTest
      */
     protected Long seedApprovedReport(LocalDate date, String amount) {
         var id = seedSubmittedReport(date, amount);
-        var admin = userRepository.findByEmail("admin@vaadin.com").orElseThrow();
-        var report = reportRepository.findById(id).orElseThrow();
-        report.approve(admin, Instant.parse("2026-07-14T08:00:00Z"));
-        reportRepository.save(report);
+        transactions.executeWithoutResult(status -> {
+            var admin = userRepository.findByEmail("admin@vaadin.com").orElseThrow();
+            var report = reportRepository.findById(id).orElseThrow();
+            report.approve(admin, Instant.parse("2026-07-14T08:00:00Z"));
+            reportRepository.save(report);
+        });
         return id;
     }
 

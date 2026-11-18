@@ -65,7 +65,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * list. Persisted state is asserted through {@link #service}.
  */
 @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-class ReportDetailViewUiTest extends AbstractReportViewUiTest {
+@org.springframework.transaction.annotation.Transactional
+@RequiresTestingTool(TestingTool.BROWSERLESS)
+class ReportDetailViewUiTest extends AbstractReportViewUiTest
+        implements com.vaadin.browserless.locator.Locators {
 
     /**
      * Only to detach a just-seeded {@code Receipt}. This test class is
