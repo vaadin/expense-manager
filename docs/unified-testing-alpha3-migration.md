@@ -115,7 +115,7 @@ parameter, and 43 call sites pass it (46 lines, one file).
 | Playwright | 64 reported | 0 | 0 | **6** | 58 |
 
 Browserless needed **no** `vaadin.testing.browserless.view-packages` setting. In alpha2 it was required for
-`DashboardView`; alpha3 seems to find routes outside the test's package by itself (to be confirmed in step 5).
+`DashboardView`. Step 5 confirmed that alpha3 no longer needs it (see 1c).
 
 On Playwright, the 5 classes under the abstract bases fail as a whole (reported as 1 each), and one test errors
 in `ErrorDialogFlowUiTest`. The 58 skips are expected.
@@ -145,6 +145,20 @@ in `ErrorDialogFlowUiTest`. The 58 skips are expected.
   the recipe (put it on the concrete subclasses).
 
 _Wrong rewrites found later, during step 6, are added here._
+
+### 1c. Test configuration — none needed
+
+The alpha2 port needed `src/test/resources/junit-platform.properties` with
+`vaadin.testing.browserless.view-packages=com.vaadin.expensemanager`. alpha2 scanned only the test class's own
+package, so it never found `DashboardView` (in `base.ui`) from a test in another package.
+
+alpha3 changes the default. In a Spring test, it scans the packages of the `@SpringBootApplication` plus the
+test's own package, for test-only views (`SpringSupport.applicationPackages`, documented on `BrowserlessAdapter`).
+The property only overrides that. Evidence: `ApprovalAccessUiTest` (`approval.ui`) navigates to `DashboardView`
+(`base.ui`) and passes on Browserless with no configuration, along with the other 204 tests.
+
+So **no file was added**: one migration step fewer than alpha2. The tool is still chosen per run with
+`-Dvaadin.testing.tool=playwright|selenium`; Browserless is the default.
 
 ## 2. Skill efficiency
 
