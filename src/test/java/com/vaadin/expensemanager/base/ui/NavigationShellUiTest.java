@@ -1,31 +1,33 @@
 package com.vaadin.expensemanager.base.ui;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
+import java.util.List;
+
+import com.vaadin.expensemanager.reference.ui.VatRateView;
 import com.vaadin.expensemanager.report.ui.MyReportsView;
+import com.vaadin.expensemanager.report.ui.ReportDetailView;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
-import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.applayout.AppLayout;
-import com.vaadin.flow.component.contextmenu.ContextMenu;
-import com.vaadin.flow.router.RouterLink;
-import com.vaadin.testing.unified.RequiresTestingTool;
-import com.vaadin.testing.unified.TestingTool;
-import com.vaadin.testing.unified.UnifiedPage;
-import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
-import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
+import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.sidenav.SideNav;
+import com.vaadin.testing.unified.UnifiedElement;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.component.UnifiedHeader;
+import com.vaadin.testing.unified.component.UnifiedMenuBar;
+import com.vaadin.testing.unified.component.UnifiedNav;
+import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import java.util.List;
-
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * UI unit test for the redesigned app shell (issue #146, ADR-0017), driven with
- * Vaadin's browserless tester — no browser, full Spring context.
+ * Unified UI test for the redesigned app shell (issue #146, ADR-0017): full Spring
+ * context, on every Testing Tool.
  *
  * <p>Verifies the shell's contract from the outside for an authenticated user:
  * the landing dashboard renders inside {@link MainLayout}, the top bar carries
@@ -39,8 +41,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * browser instead (see {@code docs/manual-verification.md}).
  *
  * <p>Boots on the same singleton {@link PostgreSQLContainer} pattern as
- * {@code AbstractIntegrationTest}; this class can't extend that base because
- * {@link SpringBrowserlessTest} already occupies the single inheritance slot.
+ * {@code AbstractIntegrationTest}. The shell is read through the Core Set
+ * Wrappers of what {@code AppHeader} renders: a {@code <header>} with the
+ * {@code app-header} class, its {@code <nav>}, and the account {@code MenuBar}.
  */
 @UnifiedSpringBootTest
 @ActiveProfiles("test")
@@ -56,16 +59,13 @@ class NavigationShellUiTest {
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void landingViewRendersInsideMainLayout(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: navigate(DashboardView.class)
-        var dashboard = browserless.navigate(DashboardView.class);
+        page.navigate(DashboardView.class);
 
-        assertThat(dashboard).isNotNull();
-        // TODO unified: Browserless Escape Hatch: getCurrentView()
-        assertThat(browserless.getCurrentView()).isInstanceOf(DashboardView.class);
-        assertThat(dashboard.findAncestor(MainLayout.class)).isNotNull();
+        assertThat(page).isAt(DashboardView.class);
+        // MainLayout is what draws the app header around the view.
+        assertThat(header(page)).exists();
+        assertThat(page.findComponent(H2.class).withTextContaining("Welcome")).exists();
     }
 
     /**
@@ -74,23 +74,17 @@ class NavigationShellUiTest {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void theDrawerShellIsGone(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(DashboardView.class);
 
-        // TODO unified: Browserless Escape Hatch: $(AppLayout.class).all(), no Wrapper for AppLayout: write one (ADR 0003)
-        assertThat(browserless.$(AppLayout.class).all()).isEmpty();
-        // TODO unified: Browserless Escape Hatch: $(SideNav.class).all(), no Wrapper for SideNav: write one (ADR 0003)
-        assertThat(browserless.$(SideNav.class).all()).isEmpty();
-        // TODO unified: Browserless Escape Hatch: $(AppHeader.class).all(), no Wrapper for AppHeader: write one (ADR 0003)
-        assertThat(browserless.$(AppHeader.class).all()).hasSize(1);
+        assertThat(page.findComponent(AppLayout.class)).doesNotExist();
+        assertThat(page.findComponent(SideNav.class)).doesNotExist();
+        assertThat(header(page)).hasCount(1);
     }
 
     /** Eight views, three links — and the groups are in the design's order. */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void adminSeesTheThreeDesignedGroups(UnifiedPage page) {
         page.navigate(DashboardView.class);
 
@@ -102,29 +96,25 @@ class NavigationShellUiTest {
      * The Reference Tables pill is a plain link since #169, not a menu button:
      * its three routes are reached through {@code ReferenceTabs} inside the
      * content column, so the group has one destination and the shell already
-     * rendered a one-entry group as a link. Admin Tasks still opens a menu, which
-     * is why this asserts the pill's own type rather than counting ContextMenus.
+     * rendered a one-entry group as a link. Admin Tasks still opens a menu.
+     * Observed from outside: the pill is an {@code <a>} to {@code vat-rates}, and
+     * activating it goes there rather than opening anything.
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void theReferenceTablesPillIsAPlainLinkWithNoMenuBehindIt(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(DashboardView.class);
 
-        var pill = navPills(page).stream()
-                .filter(p -> "Reference Tables"
-                        .equals(p.getElement().getTextRecursively()))
+        UnifiedElement pill = navPills(page).stream()
+                .filter(p -> "Reference Tables".equals(p.getText().strip()))
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(pill).isInstanceOf(RouterLink.class);
-        assertThat(((RouterLink) pill).getHref()).isEqualTo("vat-rates");
-        // No ContextMenu is attached to it — the one left in the bar is Admin
-        // Tasks', and a menu on this pill is exactly what #169 removed.
-        // TODO unified: Browserless Escape Hatch: $(ContextMenu.class).all(), no Wrapper for ContextMenu: write one (ADR 0003)
-        assertThat(browserless.$(ContextMenu.class).all())
-                .allSatisfy(menu -> assertThat(menu.getTarget()).isNotSameAs(pill));
+        assertThat(pill.getTag()).isEqualTo("a");
+        assertThat(pill.getAttribute("href")).isEqualTo("vat-rates");
+
+        pill.click();
+        assertThat(page).isAt(VatRateView.class);
     }
 
     /**
@@ -133,7 +123,6 @@ class NavigationShellUiTest {
      */
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void plainUserSeesOnlyTheGroupTheyCanUse(UnifiedPage page) {
         page.navigate(DashboardView.class);
 
@@ -147,21 +136,18 @@ class NavigationShellUiTest {
      */
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void currentGroupFollowsTheGroupNotTheRoute(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(MyReportsView.class);
         assertThat(currentNavLabel(page)).isEqualTo("My Expenses");
 
-        // TODO unified: Browserless Escape Hatch:navigate("report", com.vaadin.expensemanager.report.ui.ReportDetailView.class)
-        browserless.navigate("report", com.vaadin.expensemanager.report.ui.ReportDetailView.class);
+        page.navigate("report");
+        assertThat(page).isAt(ReportDetailView.class);
         assertThat(currentNavLabel(page)).isEqualTo("My Expenses");
     }
 
     /** The dashboard has no nav item in the design, so no group is current. */
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void theDashboardLeavesEveryGroupIdle(UnifiedPage page) {
         page.navigate(DashboardView.class);
 
@@ -174,15 +160,13 @@ class NavigationShellUiTest {
      */
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void theViewChoosesItsHeaderVariant(UnifiedPage page) {
         page.navigate(MyReportsView.class);
-        assertThat(headerClasses(page)).contains(HeaderState.HOME.className());
+        assertThat(header(page).withClassName(HeaderState.HOME.className())).exists();
 
         page.navigate(DashboardView.class);
-        assertThat(headerClasses(page))
-                .contains(HeaderState.DEFAULT.className())
-                .doesNotContain(HeaderState.HOME.className());
+        assertThat(header(page).withClassName(HeaderState.DEFAULT.className())).exists();
+        assertThat(header(page).withClassName(HeaderState.HOME.className())).doesNotExist();
     }
 
     /**
@@ -193,66 +177,46 @@ class NavigationShellUiTest {
      */
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void theAvatarMenuHoldsIdentityThemeAndSignOut(UnifiedPage page) {
         page.navigate(DashboardView.class);
 
-        assertThat(accountMenuLabels(page))
+        // The avatar trigger has no text; its aria-label is its name.
+        String trigger = "Account menu for Demo User";
+        assertThat(page.find(UnifiedMenuBar.class).withItem(trigger).getItems(trigger))
                 .contains("Demo User", ThemeSwitcher.LABEL, "Sign out");
     }
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void unknownRouteResolvesToCustomNotFoundView(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: navigate("no-such-route-exists", NotFoundView.class)
-        browserless.navigate("no-such-route-exists", NotFoundView.class);
+        page.navigate("no-such-route-exists");
 
-        // TODO unified: Browserless Escape Hatch: getCurrentView()
-        assertThat(browserless.getCurrentView()).isInstanceOf(NotFoundView.class);
+        // NotFoundView's empty state, inside the shell (it keeps the navigation).
+        assertThat(page.findComponent(H2.class).withText("Page not found")).exists();
+        assertThat(header(page)).exists();
     }
 
     // ---- helpers -----------------------------------------------------------
 
-    /** The nav pills, in bar order, whatever element type each renders as. */
-    private List<Component> navPills(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: $(AppHeader.class).first().getChildren().flatMap(Component::getChildren).filter(child -> child.getElement().getClassList().contains("app-nav")).flatMap(Component::getChildren).toList(), no Wrapper for AppHeader: write one (ADR 0003)
-        return browserless.$(AppHeader.class).first().getChildren()
-                .flatMap(Component::getChildren)
-                .filter(child -> child.getElement().getClassList().contains("app-nav"))
-                .flatMap(Component::getChildren)
-                .toList();
+    private static UnifiedHeader header(UnifiedPage page) {
+        return page.find(UnifiedHeader.class).withClassName("app-header");
     }
 
-    private List<String> navLabels(UnifiedPage page) {
-        return navPills(page).stream().map(pill -> pill.getElement().getTextRecursively()).toList();
+    /** The nav pills, in bar order, whatever element type each renders as. */
+    private static List<UnifiedElement> navPills(UnifiedPage page) {
+        return header(page).find(UnifiedNav.class).withClassName("app-nav").element().children();
+    }
+
+    private static List<String> navLabels(UnifiedPage page) {
+        return navPills(page).stream().map(pill -> pill.getText().strip()).toList();
     }
 
     /** The label of the group marked current, or {@code null} if none is. */
-    private String currentNavLabel(UnifiedPage page) {
+    private static String currentNavLabel(UnifiedPage page) {
         return navPills(page).stream()
-                .filter(pill -> "page"
-                        .equals(pill.getElement().getAttribute("aria-current")))
-                .map(pill -> pill.getElement().getTextRecursively())
+                .filter(pill -> "page".equals(pill.getAttribute("aria-current")))
+                .map(pill -> pill.getText().strip())
                 .findFirst()
                 .orElse(null);
-    }
-
-    private List<String> headerClasses(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: $(AppHeader.class).first().getElement().getClassList(), no Wrapper for AppHeader: write one (ADR 0003)
-        return List.copyOf(browserless.$(AppHeader.class).first().getElement().getClassList());
-    }
-
-    private List<String> accountMenuLabels(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: $(com.vaadin.flow.component.menubar.MenuBar.class).all().stream().flatMap(bar -> bar.getItems().stream()).flatMap(item -> item.getSubMenu().getItems().stream()).map(item -> item.getElement().getTextRecursively()).toList(), no Wrapper for com.vaadin.flow.component.menubar.MenuBar: write one (ADR 0003)
-        return browserless.$(com.vaadin.flow.component.menubar.MenuBar.class).all().stream()
-                .flatMap(bar -> bar.getItems().stream())
-                .flatMap(item -> item.getSubMenu().getItems().stream())
-                .map(item -> item.getElement().getTextRecursively())
-                .toList();
     }
 }
