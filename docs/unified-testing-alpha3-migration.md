@@ -361,5 +361,5 @@ a mock environment there would remove ≈ 10 s of the 11.5 s regression on this 
 `@UnifiedSpringBootTest` offers no way to opt out: it aliases only `properties`, `classes` and `args`, not
 `webEnvironment`.
 
-For scale, the same 205 tests on Playwright take ≈ 3.3 min of class time (`ReportDetailViewUiTest` alone
-≈ 118 s), against ≈ 32 s on Browserless.
+For scale, on Playwright `ReportDetailViewUiTest` alone took ≈ 118 s (single run, step 6) against
+8.6 s here. The Playwright suite was not benchmarked with this protocol.
