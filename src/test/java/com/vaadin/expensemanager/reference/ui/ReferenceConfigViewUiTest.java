@@ -5,6 +5,11 @@ import java.math.BigDecimal;
 import com.vaadin.expensemanager.base.ui.ErrorSummary;
 import com.vaadin.expensemanager.reference.VatRateDto;
 import com.vaadin.flow.component.UI;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 
@@ -35,23 +40,23 @@ class ReferenceConfigViewUiTest extends AbstractReferenceDataViewUiTest {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void gridRendersRowsWithTextStatusAndActions() {
-        navigate(VatRateView.class);
+    void gridRendersRowsWithTextStatusAndActions(UnifiedPage page) {
+        page.navigate(VatRateView.class);
         var grid = findGrid(VatRateDto.class);
 
         // Data column + a text (never colour-only) status column.
         assertThat(columnText(grid, RATE_COL)).containsExactly("25.5 %", "13.5 %", "10 %", "0 %");
         assertThat(columnText(grid, STATUS_COL)).allMatch("Active"::equals);
         // Each row carries an accessible Edit action.
-        assertThat(rowActionButton(grid, 0, ACTIONS_COL, "Edit rate 25.5 %")).isNotNull();
+        assertThat(rowActionButton(page, grid, 0, ACTIONS_COL, "Edit rate 25.5 %")).isNotNull();
     }
 
     // ------------------------------------------------------ add/edit round-trip
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void addThroughEditorAppendsActiveRow() {
-        navigate(VatRateView.class);
+    void addThroughEditorAppendsActiveRow(UnifiedPage page) {
+        page.navigate(VatRateView.class);
         int before = findGrid(VatRateDto.class).size();
 
         findButton().withText("New").click();
@@ -66,11 +71,13 @@ class ReferenceConfigViewUiTest extends AbstractReferenceDataViewUiTest {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void editThroughEditorChangesTheRow() {
-        navigate(VatRateView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void editThroughEditorChangesTheRow(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(VatRateView.class);
 
-        test(rowActionButton(findGrid(VatRateDto.class), 1, ACTIONS_COL,
-                "Edit rate 13.5 %")).click();
+        // TODO unified: Component Reference:test(rowActionButton(page, findGrid(VatRateDto.class), 1, ACTIONS_COL, "Edit rate 13.5 %")).click(): replace it with a locator that finds the same component
+        browserless.test(rowActionButton(page, findGrid(VatRateDto.class), 1, ACTIONS_COL, "Edit rate 13.5 %")).click();
         findBigDecimalField().setValue(new BigDecimal("12"));
         findButton().withText("Save").click();
 
@@ -82,8 +89,10 @@ class ReferenceConfigViewUiTest extends AbstractReferenceDataViewUiTest {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void invalidSaveShowsErrorSummaryAndPersistsNothing() {
-        navigate(VatRateView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void invalidSaveShowsErrorSummaryAndPersistsNothing(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(VatRateView.class);
         int before = findGrid(VatRateDto.class).size();
 
         // Always-enabled Save: submitting the empty required field surfaces the
@@ -104,7 +113,8 @@ class ReferenceConfigViewUiTest extends AbstractReferenceDataViewUiTest {
         // own heading. It is tabindex=0 (not the -1 the GOV.UK pattern would use)
         // so it joins a Dialog's focus trap and Tab-after-submit reaches the fields
         // rather than the dialog frame — see ErrorSummary and web-components#3486.
-        var summary = find(ErrorSummary.class).single();
+        // TODO unified: Browserless Escape Hatch: find(ErrorSummary.class).single(), no Wrapper for ErrorSummary: write one (ADR 0003)
+        var summary = browserless.find(ErrorSummary.class).single();
         assertThat(summary.getElement().getAttribute("role")).isEqualTo("group");
         assertThat(summary.getElement().getAttribute("tabindex")).isEqualTo("0");
         assertThat(summary.getElement().getAttribute("aria-labelledby"))
@@ -118,18 +128,21 @@ class ReferenceConfigViewUiTest extends AbstractReferenceDataViewUiTest {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void reorderSwapsRowsAndBoundaryButtonsAreDisabled() {
-        navigate(VatRateView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void reorderSwapsRowsAndBoundaryButtonsAreDisabled(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(VatRateView.class);
         var grid = findGrid(VatRateDto.class);
         assertThat(columnText(grid, RATE_COL))
                 .containsExactly("25.5 %", "13.5 %", "10 %", "0 %");
 
-        assertThat(rowActionButton(grid, 0, ACTIONS_COL, "Move rate 25.5 % up")
+        assertThat(rowActionButton(page, grid, 0, ACTIONS_COL, "Move rate 25.5 % up")
                 .isEnabled()).isFalse();
-        assertThat(rowActionButton(grid, 3, ACTIONS_COL, "Move rate 0 % down")
+        assertThat(rowActionButton(page, grid, 3, ACTIONS_COL, "Move rate 0 % down")
                 .isEnabled()).isFalse();
 
-        test(rowActionButton(grid, 1, ACTIONS_COL, "Move rate 13.5 % up")).click();
+        // TODO unified: Component Reference:test(rowActionButton(page, grid, 1, ACTIONS_COL, "Move rate 13.5 % up")).click(): replace it with a locator that finds the same component
+        browserless.test(rowActionButton(page, grid, 1, ACTIONS_COL, "Move rate 13.5 % up")).click();
 
         assertThat(columnText(findGrid(VatRateDto.class), RATE_COL))
                 .containsExactly("13.5 %", "25.5 %", "10 %", "0 %");
@@ -139,16 +152,18 @@ class ReferenceConfigViewUiTest extends AbstractReferenceDataViewUiTest {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void deactivateRetainsRowAsInactive() {
-        navigate(VatRateView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void deactivateRetainsRowAsInactive(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(VatRateView.class);
 
-        test(rowActionButton(findGrid(VatRateDto.class), 0, ACTIONS_COL,
-                "Deactivate rate 25.5 %")).click();
+        // TODO unified: Component Reference:test(rowActionButton(page, findGrid(VatRateDto.class), 0, ACTIONS_COL, "Deactivate rate 25.5 %")).click(): replace it with a locator that finds the same component
+        browserless.test(rowActionButton(page, findGrid(VatRateDto.class), 0, ACTIONS_COL, "Deactivate rate 25.5 %")).click();
 
         var grid = findGrid(VatRateDto.class);
         assertThat(grid.getCellText(0, RATE_COL)).isEqualTo("25.5 %");
         assertThat(grid.getCellText(0, STATUS_COL)).isEqualTo("Inactive");
         // The toggle now offers to re-activate the retained row.
-        assertThat(rowActionButton(grid, 0, ACTIONS_COL, "Activate rate 25.5 %")).isNotNull();
+        assertThat(rowActionButton(page, grid, 0, ACTIONS_COL, "Activate rate 25.5 %")).isNotNull();
     }
 }

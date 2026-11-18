@@ -5,6 +5,11 @@ import java.time.LocalDate;
 import com.vaadin.expensemanager.base.ui.DashboardView;
 import com.vaadin.expensemanager.report.ui.ReportDetailView;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 
@@ -26,38 +31,51 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ApprovalAccessUiTest extends AbstractApprovalViewUiTest {
 
     @Test
-    void aNonAdminCannotReachTheQueueRoute() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aNonAdminCannotReachTheQueueRoute(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // Navigation access control rejects a USER: the ADMIN-only view never
         // resolves (mirrors AdminToolsViewUiTest).
-        assertThatThrownBy(() -> navigate(ApprovalQueueView.class))
+        // TODO unified: Browserless Escape Hatch: navigate(ApprovalQueueView.class)
+        assertThatThrownBy(() -> browserless.navigate(ApprovalQueueView.class))
                 .isInstanceOf(Exception.class);
     }
 
     @Test
-    void aNonAdminCannotReachTheReviewHistoryRoute() {
-        assertThatThrownBy(() -> navigate(ReviewHistoryView.class))
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aNonAdminCannotReachTheReviewHistoryRoute(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: navigate(ReviewHistoryView.class)
+        assertThatThrownBy(() -> browserless.navigate(ReviewHistoryView.class))
                 .isInstanceOf(Exception.class);
     }
 
     @Test
-    void aNonAdminCannotEnterReviewMode() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aNonAdminCannotEnterReviewMode(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedSubmittedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
 
         // The review alias is @PermitAll but gated in-view: a USER is forwarded to
         // the dashboard, never rendering the report in review mode.
-        navigate("review/" + id, DashboardView.class);
-        assertThat(getCurrentView()).isInstanceOf(DashboardView.class);
+        // TODO unified: Browserless Escape Hatch:// The review alias is @PermitAll but gated in-view: a USER is forwarded to// the dashboard, never rendering the report in review mode.navigate("review/" + id, DashboardView.class)
+        browserless.navigate("review/" + id, DashboardView.class);
+        // TODO unified: Browserless Escape Hatch: getCurrentView()
+        assertThat(browserless.getCurrentView()).isInstanceOf(DashboardView.class);
     }
 
     @Test
-    void ownerSeesTheirApprovedReportReadOnly() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void ownerSeesTheirApprovedReportReadOnly(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedApprovedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
 
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        var text = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var text = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(text).contains("Approved");
         assertThat(findButton().withText("Save").exists()).isFalse();
         assertThat(findButton().withText("Submit for approval").exists()).isFalse();

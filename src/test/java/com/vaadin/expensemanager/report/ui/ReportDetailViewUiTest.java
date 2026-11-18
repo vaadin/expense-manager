@@ -40,6 +40,11 @@ import com.vaadin.flow.component.radiobutton.RadioButtonGroupLocator;
 import com.vaadin.flow.component.textfield.BigDecimalField;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.upload.Upload;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+
 import jakarta.persistence.EntityManager;
 
 import org.junit.jupiter.api.Test;
@@ -72,8 +77,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     private EntityManager entityManager;
 
     @Test
-    void newReportSaveWithDefaultsPersistsTodayDatedDraftAndRoutesToId() {
-        navigate(ReportDetailView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void newReportSaveWithDefaultsPersistsTodayDatedDraftAndRoutesToId(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(ReportDetailView.class);
 
         // No field touched: the date defaults to today; first save persists.
         findButton().withText("Save").click();
@@ -82,42 +89,50 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(mine).hasSize(1);
         assertThat(mine.getFirst().reportDate()).isEqualTo(LocalDate.now());
         // Still on the detail view — now the persisted /report/{id} form.
-        assertThat(getCurrentView()).isInstanceOf(ReportDetailView.class);
+        // TODO unified: Browserless Escape Hatch: getCurrentView()
+        assertThat(browserless.getCurrentView()).isInstanceOf(ReportDetailView.class);
     }
 
     @Test
-    void missingRequiredDateShowsErrorSummaryAndPersistsNothing() {
-        navigate(ReportDetailView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void missingRequiredDateShowsErrorSummaryAndPersistsNothing(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(ReportDetailView.class);
 
         // The DatePicker tester refuses to *set* an invalid value (null on a
         // required field), so clear the value straight on the component to model
         // a user emptying the field, then save (finding F-021).
-        $(DatePicker.class).first().clear();
+        // TODO unified: Browserless Escape Hatch:// The DatePicker tester refuses to *set* an invalid value (null on a// required field), so clear the value straight on the component to model// a user emptying the field, then save (finding F-021).$(DatePicker.class).first().clear()
+        browserless.$(DatePicker.class).first().clear();
         findButton().withText("Save").click();
 
         // Always-enabled Save + top-of-form error summary (ADR-0020).
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Report date is required");
         assertThat(service.listMine()).isEmpty();
     }
 
     @Test
-    void reportDateCarriesABadInputErrorMessage() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void reportDateCarriesABadInputErrorMessage(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // Issue #85: typing an unparseable date (e.g. "dsdds") makes the picker
         // invalid; without a bad-input message the error reaches the summary blank.
         // The tester can't type an unparseable value, so we assert the message that
         // prevents the blank error is configured on the field.
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
 
-        var picker = (DatePicker) $(DatePicker.class).first();
+        // TODO unified: Browserless Escape Hatch: $(DatePicker.class).first()
+        var picker = (DatePicker) browserless.$(DatePicker.class).first();
         assertThat(picker.getI18n()).isNotNull();
         assertThat(picker.getI18n().getBadInputErrorMessage()).isNotBlank();
     }
 
     @Test
-    void editingExistingReportUpdatesItsFields() {
+    void editingExistingReportUpdatesItsFields(UnifiedPage page) {
         var id = seedReport(LocalDate.of(2026, 7, 1), "before");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findTextArea().withLabel("Additional Info").setValue("after");
         findDatePicker().withLabel("Report date").setValue(LocalDate.of(2026, 7, 20));
@@ -129,29 +144,34 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void deletingADraftRemovesItAndReturnsToTheList() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void deletingADraftRemovesItAndReturnsToTheList(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReport(LocalDate.of(2026, 7, 1), "scratch");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findButton().withText("Delete").click();          // opens the confirm dialog
         findButton().withText("Delete report").click();   // confirms
 
-        assertThat(getCurrentView()).isInstanceOf(MyReportsView.class);
+        // TODO unified: Browserless Escape Hatch: getCurrentView()
+        assertThat(browserless.getCurrentView()).isInstanceOf(MyReportsView.class);
         assertThat(service.listMine()).noneMatch(r -> r.id().equals(id));
     }
 
     @Test
-    void newReportDoesNotOfferDelete() {
-        navigate(ReportDetailView.class);
+    void newReportDoesNotOfferDelete(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
 
         // Delete is hidden until the report is a persisted DRAFT.
         assertThat(findButton().withText("Delete").exists()).isFalse();
     }
 
     @Test
-    void addingALineViaTheDialogUpdatesLiveTotalsAndPersistsOnSave() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void addingALineViaTheDialogUpdatesLiveTotalsAndPersistsOnSave(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findButton().withAriaLabel("Add expense").click();
         findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
@@ -162,7 +182,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         saveExpense();
 
         // Live total bar reflects the added line before the report is saved.
-        assertThat(getCurrentView().getElement().getTextRecursively()).contains("€100.00");
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively()).contains("€100.00");
 
         findButton().withText("Save").click();
 
@@ -173,9 +194,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void lineEditorDefaultsQuantityToOneAndShowsTheLineTotalLive() {
+    void lineEditorDefaultsQuantityToOneAndShowsTheLineTotalLive(UnifiedPage page) {
         var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findButton().withAriaLabel("Add expense").click();
 
@@ -193,17 +214,20 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void lineEditorLaysItsFieldsOutAsTheDesignsTwoColumnGrid() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void lineEditorLaysItsFieldsOutAsTheDesignsTwoColumnGrid(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // docs/design/components/line-editor-dialog.md § Layout. Everything spans
         // both columns except unit price/quantity, which pair, and VAT rate, which
         // is drawn half width with the cell beside it deliberately empty.
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add expense").click();
 
         var dialog = findDialog().getComponent();
         assertThat(dialog.getWidth()).isEqualTo("26rem");
 
-        var form = $(FormLayout.class).single();
+        // TODO unified: Browserless Escape Hatch: $(FormLayout.class).single(), no Wrapper for FormLayout: write one (ADR 0003)
+        var form = browserless.$(FormLayout.class).single();
         // ResponsiveStep exposes no getters, only toJson() — so compare the
         // serialised steps against the two the spec prescribes.
         assertThat(form.getResponsiveSteps())
@@ -214,24 +238,26 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(form.getColumnSpacing()).isEqualTo("var(--em-section-gap)");
         assertThat(form.getRowSpacing()).isEqualTo("var(--em-card-padding)");
 
-        assertThat(form.getColspan(comboBox("Expense type"))).isEqualTo(2);
+        assertThat(form.getColspan(comboBox(page, "Expense type"))).isEqualTo(2);
         assertThat(form.getColspan(bigDecimalField("Unit price"))).isEqualTo(1);
         assertThat(form.getColspan(bigDecimalField("Quantity"))).isEqualTo(1);
-        assertThat(form.getColspan(comboBox("VAT rate"))).isEqualTo(1);
+        assertThat(form.getColspan(comboBox(page, "VAT rate"))).isEqualTo(1);
         assertThat(form.getColspan(
                 findTextArea().withLabel("Comment").getComponent())).isEqualTo(2);
         // The total row and the receipt block are grid children too, both full width.
-        assertThat(form.getColspan($(HorizontalLayout.class)
+        // TODO unified: Browserless Escape Hatch: $(HorizontalLayout.class).withClassName("line-total-row").single(), no Wrapper for HorizontalLayout: write one (ADR 0003)
+        assertThat(form.getColspan(browserless.$(HorizontalLayout.class)
                 .withClassName("line-total-row").single())).isEqualTo(2);
-        assertThat(form.getColspan($(Upload.class).single().getParent().orElseThrow()))
+        // TODO unified: Browserless Escape Hatch: $(Upload.class).single().getParent().orElseThrow(), no Wrapper for Upload: write one (ADR 0003)
+        assertThat(form.getColspan(browserless.$(Upload.class).single().getParent().orElseThrow()))
                 .isEqualTo(2);
     }
 
     @Test
-    void lineEditorUsesTheDesignsFieldTypesAndCopy() {
+    void lineEditorUsesTheDesignsFieldTypesAndCopy(UnifiedPage page) {
         // Delta items 4, 9, 10, 11 of #175, plus the component mapping: the frame
         // hides the header close button, a third footer button and a checkbox.
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add expense").click();
 
         var comment = findTextArea().withLabel("Comment").getComponent();
@@ -248,10 +274,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void lineEditorShowsNoReceiptStatusUntilOneIsAttached() {
+    void lineEditorShowsNoReceiptStatusUntilOneIsAttached(UnifiedPage page) {
         // Delta item 12: the empty state carries no status text — the Upload control
         // already says it, and the design draws none.
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add expense").click();
 
         assertThat(findDialog().getComponent().getElement().getTextRecursively())
@@ -266,13 +292,16 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void lineEditorPutsTheUploadGlyphInTheDropLabelNotOnTheButton() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void lineEditorPutsTheUploadGlyphInTheDropLabelNotOnTheButton(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // Delta item 13, and iconography.md's Lucide-only rule (#163): the drawn
         // anatomy slots the glyph beside the drop label and leaves the button plain.
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add expense").click();
 
-        var upload = $(Upload.class).single();
+        // TODO unified: Browserless Escape Hatch: $(Upload.class).single(), no Wrapper for Upload: write one (ADR 0003)
+        var upload = browserless.$(Upload.class).single();
         assertThat(((Button) upload.getUploadButton()).getText())
                 .isEqualTo("Upload receipt\u2026");
         // Plain text: the label's Text node and nothing else — no icon slot.
@@ -284,9 +313,11 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aQuantityLinePersistsItsUnitPriceAndTotalsTheProduct() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aQuantityLinePersistsItsUnitPriceAndTotalsTheProduct(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findButton().withAriaLabel("Add expense").click();
         findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
@@ -299,7 +330,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
 
         // The card shows the qty × unit = gross breakdown and the live total bar
         // reflects the product, both before the report is saved.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("3 × €100.00 = €300.00").contains("€300.00");
 
         findButton().withText("Save").click();
@@ -311,20 +343,23 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aQuantityOneCardShowsNoQuantityBreakdown() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aQuantityOneCardShowsNoQuantityBreakdown(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // The feature is invisible until used (ADR-0023).
         var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "100.00");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("€100.00")
                 .doesNotContain("1 × €100.00");
     }
 
     @Test
-    void aNonPositiveQuantityIsBlockedWithAnErrorSummary() {
+    void aNonPositiveQuantityIsBlockedWithAnErrorSummary(UnifiedPage page) {
         var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findButton().withAriaLabel("Add expense").click();
         findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
@@ -342,13 +377,14 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void editingALineLoadsAndUpdatesItsQuantity() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void editingALineLoadsAndUpdatesItsQuantity(UnifiedPage page) {
         var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "50.00");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Open the existing (quantity-1) line and give it a quantity. The card body
         // itself carries the click listener (no Edit button), so click that.
-        openLineCardEditor();
+        openLineCardEditor(page);
         assertThat(findBigDecimalField().withLabel("Quantity").getComponent().getValue())
                 .isEqualByComparingTo("1");
         findBigDecimalField().withLabel("Quantity").setValue(new BigDecimal("4"));
@@ -362,9 +398,11 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void lineEditorKeepsSaveEnabledAndBlocksAnEmptyLine() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void lineEditorKeepsSaveEnabledAndBlocksAnEmptyLine(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findButton().withAriaLabel("Add expense").click();
         // Always-enabled Save (ADR-0020): clicking it with nothing filled must
@@ -377,15 +415,18 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(findButton().withText("Save").inside(findDialog())
                 .getComponent().isEnabled()).isTrue();
         // … and no line was added: the empty state still shows, nothing persisted.
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("No expenses yet");
         assertThat(service.findMine(id).lines()).isEmpty();
     }
 
     @Test
-    void submittingADraftWithALineLocksItReadOnly() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void submittingADraftWithALineLocksItReadOnly(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findButton().withText("Submit for approval").click(); // opens the confirm dialog
         findButton().withText("Submit report").click();       // confirms
@@ -393,7 +434,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         // The report is now SUBMITTED and read-only to the owner: the editing
         // affordances are gone and the status is shown as text (ADR-0020).
         assertThat(service.findMine(id).status()).isEqualTo(ReportStatus.SUBMITTED);
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Submitted");
         assertThat(findButton().withText("Save").exists()).isFalse();
         assertThat(findButton().withText("Submit for approval").exists()).isFalse();
@@ -402,9 +444,11 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void submittingAnEmptyDraftShowsTheReasonAndStaysEnabled() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void submittingAnEmptyDraftShowsTheReasonAndStaysEnabled(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReport(LocalDate.of(2026, 7, 1), "empty");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Always-enabled Submit (ADR-0020): a zero-line submit is blocked with the
         // reason in the top-of-form error summary, not a silent no-op. The report
@@ -413,7 +457,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         findButton().withText("Submit for approval").click();
         findButton().withText("Submit report").click();
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("at least one line");
         assertThat(service.findMine(id).status()).isEqualTo(ReportStatus.DRAFT);
         // Submit button is still there (never disabled) so the owner can retry.
@@ -423,9 +468,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // --- Submit saves the current state + confirmation dialog (issue #81) ---
 
     @Test
-    void submittingPersistsAReportLevelEditThatWasNotSavedFirst() {
+    void submittingPersistsAReportLevelEditThatWasNotSavedFirst(UnifiedPage page) {
         var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Edit a report-level field but never click Save — the edit lives only in
         // the working copy until the submit persists it (issue #81).
@@ -441,12 +486,12 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void submittingPersistsALineAddedButNotSavedFirst() {
+    void submittingPersistsALineAddedButNotSavedFirst(UnifiedPage page) {
         // A seed with no lines: before issue #81 a line added in the dialog but not
         // Saved was lost on submit, so the submit failed the "≥1 line" guard. Now
         // the submit saves the pending line first, so it succeeds.
         var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findButton().withAriaLabel("Add expense").click();
         findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
@@ -466,9 +511,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void cancellingTheSubmitConfirmationLeavesItAnEditableDraft() {
+    void cancellingTheSubmitConfirmationLeavesItAnEditableDraft(UnifiedPage page) {
         var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findButton().withText("Submit for approval").click(); // opens the dialog
         findButton().withText("Cancel").click();              // backs out
@@ -480,31 +525,38 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void submittingWithNoReportDateBlocksBeforeConfirming() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void submittingWithNoReportDateBlocksBeforeConfirming(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Clearing the required date must block the submit at validation — the
         // confirm dialog never opens and nothing transitions.
-        $(DatePicker.class).first().clear();
+        // TODO unified: Browserless Escape Hatch:// Clearing the required date must block the submit at validation — the// confirm dialog never opens and nothing transitions.$(DatePicker.class).first().clear()
+        browserless.$(DatePicker.class).first().clear();
         findButton().withText("Submit for approval").click();
 
         assertThat(findButton().withText("Submit report").exists()).isFalse();
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Report date is required");
         assertThat(service.findMine(id).status()).isEqualTo(ReportStatus.DRAFT);
     }
 
     @Test
-    void aRejectedReportShowsTheRealReasonRejecterAndDateToTheOwner() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aRejectedReportShowsTheRealReasonRejecterAndDateToTheOwner(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100",
                 "Please attach the hotel receipt.");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The owner's callout carries the real reason, who rejected it (the seeded
         // admin), and when — replacing the placeholder note. The reason and the
         // rejecter also appear in the status-history audit trail below.
-        var text = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var text = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(text).contains("Rejected — changes requested",
                 "Please attach the hotel receipt.", "Expense Admin", "14 Jul 2026");
         assertThat(text).contains("Status history");
@@ -515,9 +567,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // --- Resubmit a rejected report (Phase 5.5) ---
 
     @Test
-    void aRejectedReportOffersResubmitNotSubmit() {
+    void aRejectedReportOffersResubmitNotSubmit(UnifiedPage page) {
         var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Fix the total.");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The forward action is relabelled "Resubmit" on a REJECTED report; the
         // first-submit label is gone (same button, flipped by status).
@@ -526,30 +578,32 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void resubmitIsNotOfferedOnDraftSubmittedOrApproved() {
+    void resubmitIsNotOfferedOnDraftSubmittedOrApproved(UnifiedPage page) {
         // DRAFT offers the first-submit label, never "Resubmit".
         var draft = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, draft);
+        page.navigate(ReportDetailView.class, draft);
         assertThat(findButton().withText("Submit for approval").exists()).isTrue();
         assertThat(findButton().withText("Resubmit").exists()).isFalse();
 
         // SUBMITTED is read-only — no forward action of either label.
         var submitted = seedSubmittedReport(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, submitted);
+        page.navigate(ReportDetailView.class, submitted);
         assertThat(findButton().withText("Resubmit").exists()).isFalse();
         assertThat(findButton().withText("Submit for approval").exists()).isFalse();
 
         // APPROVED is terminal and read-only — likewise no forward action.
         var approved = seedApprovedReport(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, approved);
+        page.navigate(ReportDetailView.class, approved);
         assertThat(findButton().withText("Resubmit").exists()).isFalse();
         assertThat(findButton().withText("Submit for approval").exists()).isFalse();
     }
 
     @Test
-    void resubmittingARejectedReportSendsItBackToSubmittedAndLocksItReadOnly() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void resubmittingARejectedReportSendsItBackToSubmittedAndLocksItReadOnly(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Fix the total.");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findButton().withText("Resubmit").click();         // opens the confirm dialog
         findButton().withText("Resubmit report").click();  // confirms
@@ -557,7 +611,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         // Back through the queue: REJECTED → SUBMITTED, and read-only to the owner
         // again (the editing affordances and the forward action are gone).
         assertThat(service.findMine(id).status()).isEqualTo(ReportStatus.SUBMITTED);
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Submitted");
         assertThat(findButton().withText("Resubmit").exists()).isFalse();
         assertThat(findButton().withText("Save").exists()).isFalse();
@@ -565,9 +620,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void resubmittingPersistsAnEditThatWasNotSavedFirst() {
+    void resubmittingPersistsAnEditThatWasNotSavedFirst(UnifiedPage page) {
         var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Add detail.");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Address the feedback but don't click Save — the resubmit must save it
         // as part of the transition (issue #81).
@@ -583,9 +638,11 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void resubmittingAnEmptyRejectedReportShowsTheReasonAndStaysEnabled() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void resubmittingAnEmptyRejectedReportShowsTheReasonAndStaysEnabled(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedEmptyRejectedReport(LocalDate.of(2026, 7, 1), "Fix the total.");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Always-enabled Resubmit (ADR-0020): a zero-line resubmit is blocked with
         // the reason in the top-of-form error summary, not a silent no-op. The
@@ -594,7 +651,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         findButton().withText("Resubmit").click();
         findButton().withText("Resubmit report").click();
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("at least one line");
         assertThat(service.findMine(id).status()).isEqualTo(ReportStatus.REJECTED);
         // The button is still there (never disabled) so the owner can add a line and retry.
@@ -602,25 +660,29 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void anAlreadySubmittedReportOpensReadOnly() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void anAlreadySubmittedReportOpensReadOnly(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedSubmittedReport(LocalDate.of(2026, 7, 1), "80.00");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Submitted");
         assertThat(findButton().withText("Save").exists()).isFalse();
         assertThat(findButton().withText("Submit for approval").exists()).isFalse();
         assertThat(findButton().withText("Delete").exists()).isFalse();
         assertThat(findButton().withAriaLabel("Add expense").exists()).isFalse();
         // The line is shown but carries no ⋮ menu at all — not a disabled one.
-        assertThat($(RowActionMenu.class).all()).isEmpty();
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).all(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        assertThat(browserless.$(RowActionMenu.class).all()).isEmpty();
     }
 
     @Test
-    void uploadingAReceiptOnAnUnsavedReportPersistsItOnFirstSave() {
+    void uploadingAReceiptOnAnUnsavedReportPersistsItOnFirstSave(UnifiedPage page) {
         // Brand-new, never-saved report: the receipt attaches at any time, no
         // "save first" gate (ADR-0021 overrides ADR-0019's save-before-attach).
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
 
         findButton().withAriaLabel("Add expense").click();
         findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
@@ -650,9 +712,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aMislabeledUploadIsRejectedAndNothingIsBuffered() {
+    void aMislabeledUploadIsRejectedAndNothingIsBuffered(UnifiedPage page) {
         var id = seedReport(LocalDate.of(2026, 7, 1), "trip");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         findButton().withAriaLabel("Add expense").click();
         findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
@@ -671,10 +733,12 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aSubmittedReportShowsTheReceiptSummaryButOffersNoUpload() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aSubmittedReportShowsTheReceiptSummaryButOffersNoUpload(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedSubmittedReportWithReceipt(LocalDate.of(2026, 7, 1), "50.00",
                 "hotel.jpg");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The receipt is viewable (read path, ADR-0021): its image preview shows
         // even on a read-only report. But every mutation surface is gone — no Add
@@ -682,44 +746,52 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(findButton().withAriaLabel("Preview receipt: hotel.jpg").exists())
                 .isTrue();
         assertThat(findButton().withAriaLabel("Add expense").exists()).isFalse();
-        assertThat($(RowActionMenu.class).all()).isEmpty();
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).all(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        assertThat(browserless.$(RowActionMenu.class).all()).isEmpty();
     }
 
     @Test
-    void aSavedImageReceiptRendersAnEnlargeablePreview() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aSavedImageReceiptRendersAnEnlargeablePreview(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // A persisted image receipt: the card shows a keyboard-operable thumbnail
         // button (accessible name) that streams from the DB and enlarges in a
         // dialog (ADR-0021 / ADR-0020) — visible even on a read-only report.
         var id = seedSubmittedReportWithReceipt(LocalDate.of(2026, 7, 1), "50.00",
                 "hotel.jpg");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         assertThat(findButton().withAriaLabel("Preview receipt: hotel.jpg").exists())
                 .isTrue();
-        assertThat($(Image.class).exists()).isTrue();
+        // TODO unified: Browserless Escape Hatch: $(Image.class).exists(), no Wrapper for Image: write one (ADR 0003)
+        assertThat(browserless.$(Image.class).exists()).isTrue();
     }
 
     @Test
-    void aSavedPdfReceiptOffersAnOpenAffordance() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aSavedPdfReceiptOffersAnOpenAffordance(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithReceipt(LocalDate.of(2026, 7, 1), "70.00",
                 "invoice.pdf", pdfBytes());
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // A PDF is not thumbnailed. On a row it is the design's chip — a paperclip
         // and the filename — and activating it still opens the browser's PDF viewer
         // in a new tab (ADR-0021); the "open" verb moved to the accessible name.
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("invoice.pdf");
-        assertThat($(Anchor.class).withClassName("expense-row-attachment")
+        // TODO unified: Browserless Escape Hatch: $(Anchor.class).withClassName("expense-row-attachment").single().getElement().getAttribute("aria-label"), no Wrapper for Anchor: write one (ADR 0003)
+        assertThat(browserless.$(Anchor.class).withClassName("expense-row-attachment")
                 .single().getElement().getAttribute("aria-label"))
                 .isEqualTo("Open receipt: invoice.pdf");
     }
 
     @Test
-    void anUnsavedImageAttachmentPreviewsFromBufferedBytes() {
+    void anUnsavedImageAttachmentPreviewsFromBufferedBytes(UnifiedPage page) {
         // Brand-new report, receipt attached but nothing saved yet: the editor
         // previews the buffered bytes directly (no DB round-trip, no receipt id).
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
 
         findButton().withAriaLabel("Add expense").click();
         findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
@@ -735,12 +807,14 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void anUnsavedImageAttachmentPreviewsOnTheCardBeforeSave() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void anUnsavedImageAttachmentPreviewsOnTheCardBeforeSave(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // Issue #89: after the line editor closes, the card must show the image
         // thumbnail from the buffered bytes right away — not only after the report
         // is saved (previously the card showed just a "📎 filename" chip until the
         // receipt was persisted and had an id).
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
 
         findButton().withAriaLabel("Add expense").click();
         findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
@@ -756,7 +830,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(findDialog().exists()).isFalse();
         assertThat(findButton().withAriaLabel("Preview receipt: taxi.jpg").exists())
                 .isTrue();
-        assertThat($(Image.class).exists()).isTrue();
+        // TODO unified: Browserless Escape Hatch: $(Image.class).exists(), no Wrapper for Image: write one (ADR 0003)
+        assertThat(browserless.$(Image.class).exists()).isTrue();
     }
 
     // --- Travel Calculator / domestic per-diem (Phase 4.2/4.3) ---
@@ -772,8 +847,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     private static final String TRIP = "Client visit";
 
     @Test
-    void insertingADomesticTripPreviewsGeneratesAndPersistsThePerDiem() {
-        navigate(ReportDetailView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void insertingADomesticTripPreviewsGeneratesAndPersistsThePerDiem(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(ReportDetailView.class);
 
         findButton().withAriaLabel("Add travel").click();
         findDateTimePicker().withLabel("Departure").setValue(DEP);
@@ -793,7 +870,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
 
         // The trip card + the live "Per diem allowance" subtotal row appear before
         // the report is even saved.
-        var text = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var text = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(text).contains("Client visit", "Helsinki, Finland",
                 "Per diem allowance", "€54.00");
 
@@ -808,8 +886,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void insertingAForeignTripCostsThePerDiemAgainstTheDestinationCountry() {
-        navigate(ReportDetailView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void insertingAForeignTripCostsThePerDiemAgainstTheDestinationCountry(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(ReportDetailView.class);
 
         findButton().withAriaLabel("Add travel").click();
         findDateTimePicker().withLabel("Departure").setValue(DEP);
@@ -828,7 +908,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
 
         saveTrip();
         // The chosen country shows on the Trip & Allowance card ("destinations, country").
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Berlin, Germany", "€71.00");
 
         findButton().withText("Save").click();
@@ -839,8 +920,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aTripCannotBeSavedWithNoDestinationCountryChosen() {
-        navigate(ReportDetailView.class);
+    void aTripCannotBeSavedWithNoDestinationCountryChosen(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
 
         findButton().withAriaLabel("Add travel").click();
         findDateTimePicker().withLabel("Departure").setValue(DEP);
@@ -857,8 +938,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void insertingATripWithKmMealParkingShowsEachSubtotalAndFoldsParkingIntoNetVat() {
-        navigate(ReportDetailView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void insertingATripWithKmMealParkingShowsEachSubtotalAndFoldsParkingIntoNetVat(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(ReportDetailView.class);
 
         findButton().withAriaLabel("Add travel").click();
         findDateTimePicker().withLabel("Departure").setValue(DEP);
@@ -889,7 +972,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(findSpan().withText("Kilometre allowance").exists()).isTrue();
         assertThat(findSpan().withText("Meal allowance").exists()).isTrue();
         assertThat(findSpan().withText("Per diem allowance").exists()).isFalse();
-        var text = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var text = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(text).contains("€66.00", "€13.50");
 
         findButton().withText("Save").click();
@@ -904,14 +988,17 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void theKilometreLineCardShowsTheKmTimesRateBreakdown() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void theKilometreLineCardShowsTheKmTimesRateBreakdown(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // 12.5 km × the seeded 2026 rate (€0.550/km) = €6.88 — the km line reads like
         // a multi-unit manual card (ADR-0023), and the euros are unchanged.
         var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("12.5"), false, BigDecimal.ZERO);
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("12.5 × €0.55 = €6.88");
         // The flat per-diem line on the same trip carries no breakdown (quantity 1).
         assertThat(shown).contains("€54.00").doesNotContain("1 × €54.00");
@@ -926,10 +1013,12 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void reCostingATripUpdatesItsKilometreCardWithoutLeavingAStaleOne() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void reCostingATripUpdatesItsKilometreCardWithoutLeavingAStaleOne(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("12.5"), false, BigDecimal.ZERO);
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Re-cost the trip through its editor: 12.5 km → 120 km.
         clickRowAction(TRIP, "Edit");
@@ -937,7 +1026,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
                 .setValue(new BigDecimal("120"));
         saveTrip();
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("120 × €0.55 = €66.00")
                 .doesNotContain("12.5 × €0.55");
 
@@ -949,9 +1039,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aTripWithoutKmOrMealHidesThoseSubtotalRows() {
+    void aTripWithoutKmOrMealHidesThoseSubtotalRows(UnifiedPage page) {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Per-diem-only trip: its row shows, but the km/meal rows stay hidden.
         assertThat(findSpan().withText("Per diem allowance").exists()).isTrue();
@@ -960,15 +1050,17 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aTripListsItsGeneratedLinesAndAReceiptCanBeAttachedToOne() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aTripListsItsGeneratedLinesAndAReceiptCanBeAttachedToOne(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("120"), true, new BigDecimal("12.00"));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Each earned line is listed under the trip with an attach affordance.
-        assertThat(rowActions("Per diem allowance (full day)"))
+        assertThat(rowActions(page, "Per diem allowance (full day)"))
                 .contains("Add receipt");
-        assertThat(rowActions("Parking")).contains("Add receipt");
+        assertThat(rowActions(page, "Parking")).contains("Add receipt");
 
         // Attach a receipt to the parking line via its focused editor.
         clickRowAction("Parking", "Add receipt");
@@ -979,7 +1071,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         // away — before the report is even saved — not just as a filename chip.
         assertThat(findButton().withAriaLabel("Preview receipt: parking.jpg").exists())
                 .isTrue();
-        assertThat($(Image.class).exists()).isTrue();
+        // TODO unified: Browserless Escape Hatch: $(Image.class).exists(), no Wrapper for Image: write one (ADR 0003)
+        assertThat(browserless.$(Image.class).exists()).isTrue();
 
         findButton().withText("Save").click();
 
@@ -992,30 +1085,36 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void editingATripWithFreeLunchRegeneratesAHalvedPerDiem() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void editingATripWithFreeLunchRegeneratesAHalvedPerDiem(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         clickRowAction(TRIP, "Edit");                    // the trip row's menu
         dailyAllowance().selectItem("Halved, free lunch provided");
         saveTrip();
 
         // Live per-diem halves to €27.00; a save regenerates the line.
-        assertThat(getCurrentView().getElement().getTextRecursively()).contains("€27.00");
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively()).contains("€27.00");
         findButton().withText("Save").click();
 
         assertThat(service.findMine(id).perDiemTotal()).isEqualByComparingTo("27.00");
     }
 
     @Test
-    void aTripEarningAPartialDayListsTwoPerDiemCardsUnderOneSubtotal() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aTripEarningAPartialDayListsTwoPerDiemCardsUnderOneSubtotal(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // Issue #124: 31 h → a full-day card (1 × €54.00) and a partial-day card
         // (1 × €25.00), each labelled by the day it prices, both folded into the single
         // "Per diem allowance" subtotal row (€79.00).
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(31));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("Per diem allowance (full day)", "€54.00",
                 "Per diem allowance (partial day)", "€25.00");
         // One subtotal row for both lines, and it is the sum.
@@ -1029,23 +1128,29 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aMultiDayPerDiemCardShowsTheDaysTimesRateBreakdown() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aMultiDayPerDiemCardShowsTheDaysTimesRateBreakdown(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // 55 h → 2 full days + 1 partial: the full-day card reads like an invoice line
         // (ADR-0023), the partial-day card stays a plain quantity-1 card.
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("2 × €54.00 = €108.00")
                 .doesNotContain("1 × €25.00");
         assertThat(service.findMine(id).perDiemTotal()).isEqualByComparingTo("133.00");
     }
 
     @Test
-    void reCostingATripDropsThePerDiemCardItNoLongerEarns() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void reCostingATripDropsThePerDiemCardItNoLongerEarns(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(31));
-        navigate(ReportDetailView.class, id);
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        page.navigate(ReportDetailView.class, id);
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Per diem allowance (partial day)");
 
         // Shorten the trip to a whole 24 h through its editor: the partial-day card
@@ -1054,7 +1159,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         findDateTimePicker().withLabel("Return").setValue(DEP.plusHours(24));
         saveTrip();
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("Per diem allowance (full day)")
                 .doesNotContain("Per diem allowance (partial day)");
 
@@ -1071,18 +1177,22 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // with a mandatory reason; the unit price stays statutory and server-computed.
 
     @Test
-    void overridingTheFullDayCountRescalesTheLineTheSubtotalAndTheTotal() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void overridingTheFullDayCountRescalesTheLineTheSubtotalAndTheTotal(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // 55 h → 2 full days (€108.00) + 1 partial day (€25.00) = €133.00.
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        page.navigate(ReportDetailView.class, id);
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("€133.00");
 
         overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
 
         // The row now reads the effective figures, badges the correction, gives the
         // reason and names what the calculator produced — before any save.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("Overridden",
                 "Reason: the Wednesday was personal",
                 "Calculated: 2 × €54.00 = €108.00");
@@ -1102,28 +1212,31 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void anOverrideSurvivesSavingAndReloadingWithItsReason() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void anOverrideSurvivesSavingAndReloadingWithItsReason(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
         findButton().withText("Save").click();
 
         // Reload the persisted report from scratch: the badge, the reason and the
         // statutory baseline are all still there.
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("Overridden",
                 "Reason: the Wednesday was personal",
                 "Calculated: 2 × €54.00 = €108.00", "€79.00");
     }
 
     @Test
-    void theMealAllowanceCountIsOverridableToo() {
+    void theMealAllowanceCountIsOverridableToo(UnifiedPage page) {
         // A not-eligible trip paying a meal allowance: one flat €13.50 line.
         var id = seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         overrideCount("Meal allowance", 2, "two meals were taken");
         findButton().withText("Save").click();
@@ -1136,9 +1249,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aBlankReasonIsRejectedInTheDialogsErrorSummaryAndChangesNothing() {
+    void aBlankReasonIsRejectedInTheDialogsErrorSummaryAndChangesNothing(UnifiedPage page) {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         clickRowAction("Per diem allowance (full day)", "Override");
         findIntegerField().withLabel("Count").setValue(1);
@@ -1154,9 +1267,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void thePartialDayCountIsCappedAtOneWithTheReasonInTheErrorSummary() {
+    void thePartialDayCountIsCappedAtOneWithTheReasonInTheErrorSummary(UnifiedPage page) {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         clickRowAction("Per diem allowance (partial day)", "Override");
         findIntegerField().withLabel("Count").setValue(2);
@@ -1170,12 +1283,12 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void theCountFieldTakesWholeNumbersAtOrAboveTheFloor() {
+    void theCountFieldTakesWholeNumbersAtOrAboveTheFloor(UnifiedPage page) {
         // Integrality is enforced at the widget (an IntegerField) and the floor with
         // it; the domain enforces both again on save. The tester refuses to set an
         // out-of-range value, so assert the constraint that makes that so (F-021).
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         clickRowAction("Per diem allowance (full day)", "Override");
 
@@ -1184,29 +1297,33 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void kilometreAndParkingLinesOfferNoOverride() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void kilometreAndParkingLinesOfferNoOverride(UnifiedPage page) {
         // Their numbers are trip inputs with a single home — edited on the trip.
         var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("120"), false,
                 new BigDecimal("12.00"));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(rowActions("Per diem allowance (full day)")).contains("Override");
-        assertThat(rowActions("Kilometre allowance")).doesNotContain("Override");
-        assertThat(rowActions("Parking")).doesNotContain("Override");
+        assertThat(rowActions(page, "Per diem allowance (full day)")).contains("Override");
+        assertThat(rowActions(page, "Kilometre allowance")).doesNotContain("Override");
+        assertThat(rowActions(page, "Parking")).doesNotContain("Override");
     }
 
     @Test
-    void resetToCalculatedRemovesTheOverrideWithoutTouchingTheTrip() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void resetToCalculatedRemovesTheOverrideWithoutTouchingTheTrip(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
         findButton().withText("Save").click();
 
         clickRowAction("Per diem allowance (full day)", "Reset to calculated");
 
         // Back to the statutory figure, live, and the badge is gone.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("€133.00").doesNotContain("Overridden");
 
         findButton().withText("Save").click();
@@ -1219,26 +1336,29 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aSubmittedReportShowsAnOverrideReadOnlyWithNoWayToChangeIt() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aSubmittedReportShowsAnOverrideReadOnlyWithNoWayToChangeIt(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
         findButton().withText("Save").click();
         service.submit(id, service.findMine(id).version());
 
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Editability falls out of the existing DRAFT/REJECTED gating — the badge,
         // reason and baseline still read, but every mutation surface is gone.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("Overridden", "Reason: the Wednesday was personal",
                 "Calculated: 2 × €54.00 = €108.00");
         // A read-only report builds no menu at all, rather than a disabled trigger.
-        assertThat(rowActions("Per diem allowance (full day)")).isEmpty();
+        assertThat(rowActions(page, "Per diem allowance (full day)")).isEmpty();
     }
 
     @Test
-    void aRejectedReportCanStillBeCorrectedWithAnOverride() {
+    void aRejectedReportCanStillBeCorrectedWithAnOverride(UnifiedPage page) {
         // The owner acts on an approver's feedback: REJECTED is editable again.
         var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100",
                 "The Wednesday looks personal.");
@@ -1252,7 +1372,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
                 loaded.total(), loaded.netTotal(), loaded.vatTotal(),
                 loaded.perDiemTotal(), loaded.kilometreTotal(), loaded.mealTotal()),
                 loaded.version());
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
         findButton().withText("Save").click();
@@ -1278,16 +1398,19 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // cascade, ADR-0024), the user is warned first and the file is named.
 
     @Test
-    void aZeroCountRemovesTheLineWithoutPromptingWhenItCarriesNoReceipt() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aZeroCountRemovesTheLineWithoutPromptingWhenItCarriesNoReceipt(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // 55 h → 2 full days (€108.00) + 1 partial day (€25.00) = €133.00.
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
 
         // Nothing to destroy, so nothing to confirm — the correction applied at once.
         assertThat(findButton().withText("Remove line and receipt").exists()).isFalse();
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         // The line is gone from the report; the full days are untouched and the
         // per-diem subtotal and total drop to just them.
         assertThat(shown).contains("€108.00").doesNotContain("€133.00", "1 × €25.00");
@@ -1295,7 +1418,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         // back — without which a zero override would be unreachable once made.
         assertThat(shown).contains("Removed",
                 "Removed from the report. Reason: the leftover was personal");
-        assertThat(rowActions("Per diem allowance (partial day)"))
+        assertThat(rowActions(page, "Per diem allowance (partial day)"))
                 .containsExactly("Reset to calculated");
 
         findButton().withText("Save").click();
@@ -1308,9 +1431,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void suppressingALineCarryingAReceiptConfirmsFirstAndNamesTheFile() {
-        var id = seedMealTravelWithSavedReceipt("lunch.jpg");
-        navigate(ReportDetailView.class, id);
+    void suppressingALineCarryingAReceiptConfirmsFirstAndNamesTheFile(UnifiedPage page) {
+        var id = seedMealTravelWithSavedReceipt(page, "lunch.jpg");
+        page.navigate(ReportDetailView.class, id);
 
         overrideCount("Meal allowance", 0, "no meal was taken after all");
 
@@ -1332,18 +1455,21 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void cancellingTheReceiptWarningLeavesBothTheLineAndItsReceiptAlone() {
-        var id = seedMealTravelWithSavedReceipt("lunch.jpg");
-        navigate(ReportDetailView.class, id);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void cancellingTheReceiptWarningLeavesBothTheLineAndItsReceiptAlone(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        var id = seedMealTravelWithSavedReceipt(page, "lunch.jpg");
+        page.navigate(ReportDetailView.class, id);
 
         overrideCount("Meal allowance", 0, "no meal was taken after all");
         findButton().withText("Cancel").click();
 
         // The line still stands at its statutory figure, with its receipt attached and
         // no override recorded — cancelling is a full retreat, not a half-applied one.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("Meal allowance", "€13.50").doesNotContain("Removed");
-        assertThat(rowActions("Meal allowance")).contains("Edit receipt");
+        assertThat(rowActions(page, "Meal allowance")).contains("Edit receipt");
 
         var stillThere = service.findMine(id).travels().getFirst()
                 .generatedLine(GeneratedLineKind.MEAL).orElseThrow();
@@ -1355,14 +1481,14 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void suppressingALineDropsItsBufferedReceiptSoNoStaleReferenceIsSaved() {
+    void suppressingALineDropsItsBufferedReceiptSoNoStaleReferenceIsSaved(UnifiedPage page) {
         // The receipt is attached but the report not yet saved (ADR-0021 buffering), so
         // the doomed file lives only in the view's pending map. Suppressing the line
         // must prune it: on save the service would otherwise be handed a
         // GeneratedLineRef for a kind the trip no longer generates.
         var id = seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         clickRowAction("Meal allowance", "Add receipt");
         findUpload().upload("lunch.jpg", "image/jpeg", jpegBytes());
         findButton().withText("Save receipt").click();
@@ -1384,19 +1510,23 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void resetToCalculatedRestoresASuppressedLineAtItsStatutoryCount() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void resetToCalculatedRestoresASuppressedLineAtItsStatutoryCount(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
         findButton().withText("Save").click();
         // Reload, so the reset acts on a persisted suppression rather than a live one.
-        navigate(ReportDetailView.class, id);
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        page.navigate(ReportDetailView.class, id);
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Removed from the report. Reason: the leftover was personal");
 
         clickRowAction("Per diem allowance (partial day)", "Reset to calculated");
 
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("Per diem allowance (partial day)", "€25.00",
                 "€133.00").doesNotContain("Removed");
 
@@ -1411,21 +1541,24 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aSuppressedLineIsShownReadOnlyOnASubmittedReport() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aSuppressedLineIsShownReadOnlyOnASubmittedReport(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
         findButton().withText("Save").click();
         service.submit(id, service.findMine(id).version());
 
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The record of what was dropped and why still reads — an approver's question
         // about a missing partial day has an answer on the report — but the way back is
         // gone with every other mutation surface (the existing DRAFT/REJECTED gating).
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Removed from the report. Reason: the leftover was personal");
-        assertThat(rowActions("Per diem allowance (partial day)")).isEmpty();
+        assertThat(rowActions(page, "Per diem allowance (partial day)")).isEmpty();
     }
 
     /**
@@ -1438,10 +1571,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * which is why the cascade lives in the schema), whereas this
      * {@code @Transactional} test would still be holding the one it just created.
      */
-    private Long seedMealTravelWithSavedReceipt(String filename) {
+    private Long seedMealTravelWithSavedReceipt(UnifiedPage page, String filename) {
         var id = seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         clickRowAction("Meal allowance", "Add receipt");
         findUpload().upload(filename, "image/jpeg", jpegBytes());
         findButton().withText("Save receipt").click();
@@ -1460,9 +1593,11 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // clicked through, which is the silent data loss it exists to prevent.
 
     @Test
-    void aTripEditThatMovesTheCalculatedCountConfirmsAndClearsTheOverride() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aTripEditThatMovesTheCalculatedCountConfirmsAndClearsTheOverride(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // 55 h → 2 full days + 1 partial; the full days are overridden down to 1.
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
         // Lengthen the trip to 79 h → 3 full days: the number the override corrected
         // has moved, so the correction cannot stand.
@@ -1476,7 +1611,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         findButton().withText("Clear and save trip").click();
 
         // The line is back to the statutory count, live: 3 × €54.00 + the partial day.
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("3 × €54.00 = €162.00", "€187.00")
                 .doesNotContain("Overridden", "the Wednesday was personal");
 
@@ -1489,8 +1625,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void cancellingTheClearingConfirmAbandonsTheTripSaveAndKeepsTheOverride() {
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void cancellingTheClearingConfirmAbandonsTheTripSaveAndKeepsTheOverride(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
         editTripReturn(DEP.plusHours(79));
         findButton().withText("Keep editing").click();
@@ -1498,7 +1636,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         // A full retreat: the trip editor is still open on the user's edit, and behind
         // it the trip and its override are untouched (1 × €54.00 + €25.00 = €79.00).
         assertThat(findButton().withText("Save").inside(findDialog()).exists()).isTrue();
-        var shown = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var shown = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(shown).contains("Overridden",
                 "Reason: the Wednesday was personal", "€79.00");
 
@@ -1513,8 +1652,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void editingOnlyThePurposeOrDestinationsNeverPromptsAndNeverClears() {
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void editingOnlyThePurposeOrDestinationsNeverPromptsAndNeverClears(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
         clickRowAction(TRIP, "Edit");
         findTextField().withLabel("Travel purpose").setValue("Client visit (Acme)");
@@ -1523,7 +1664,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
 
         // Nothing the calculation can see changed, so nothing is asked and nothing lost.
         assertThat(findButton().withText("Clear and save trip").exists()).isFalse();
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Overridden", "Reason: the Wednesday was personal", "€79.00");
 
         findButton().withText("Save").click();
@@ -1536,15 +1678,18 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aTimeChangeTheDayCountAbsorbsNeverPromptsAndNeverClears() {
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aTimeChangeTheDayCountAbsorbsNeverPromptsAndNeverClears(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
         // 55 h → 55 h 15 min: still 2 full days and one leftover over the 6 h partial
         // threshold. The inputs moved; the counts the override corrects did not.
         editTripReturn(DEP.plusHours(55).plusMinutes(15));
 
         assertThat(findButton().withText("Clear and save trip").exists()).isFalse();
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Overridden", "Reason: the Wednesday was personal", "€79.00");
 
         findButton().withText("Save").click();
@@ -1557,8 +1702,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void clearingIsPerKindSoAnUnaffectedOverrideStands() {
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+    void clearingIsPerKindSoAnUnaffectedOverrideStands(UnifiedPage page) {
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
         overrideCount("Per diem allowance (partial day)", 1, "the leftover was worked");
         findButton().withText("Save").click();
 
@@ -1581,12 +1726,12 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aMealCountChangeLeavesAPerDiemOverrideInPlace() {
+    void aMealCountChangeLeavesAPerDiemOverrideInPlace(UnifiedPage page) {
         // The other direction of per-kind clearing: a trip paying a meal allowance
         // (so earning no per-diem, issue #93) with an override on each kind — the
         // per-diem one dormant, since an override never conjures a line.
         var id = seedMealTravelOverriddenOnBothKinds();
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Stop paying the meal allowance: its count drops 1 → 0. The trip stays not
         // eligible, so the per-diem count is 0 either side and its override stands.
@@ -1605,8 +1750,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aTripEditThatMovesTwoOverriddenCountsReportsBothInOneConfirm() {
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+    void aTripEditThatMovesTwoOverriddenCountsReportsBothInOneConfirm(UnifiedPage page) {
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
         overrideCount("Per diem allowance (partial day)", 1, "the leftover was worked");
         findButton().withText("Save").click();
 
@@ -1629,10 +1774,12 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void editingAnOverrideNeverChangesTheCalculationAndNeverPrompts() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void editingAnOverrideNeverChangesTheCalculationAndNeverPrompts(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // The two surfaces are independent: an override is a correction to the
         // calculation's output, so it can never move the calculation's input.
-        var id = seedOverriddenTravel(DEP.plusHours(55));
+        var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
         clickRowAction("Per diem allowance (full day)", "Edit override");
         findIntegerField().withLabel("Count").setValue(2);
@@ -1641,7 +1788,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         findButton().withText("Save override").click();
 
         assertThat(findButton().withText("Clear and save trip").exists()).isFalse();
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Calculated: 2 × €54.00 = €108.00",
                         "Reason: both days were personal after all");
 
@@ -1655,11 +1803,13 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void theTripPreviewShowsCalculatedFiguresAnnotatedWhereAnOverrideIsInForce() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void theTripPreviewShowsCalculatedFiguresAnnotatedWhereAnOverrideIsInForce(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // What makes the "2 → 3" warning legible: the dialog previews the trip inputs,
         // never the corrected figures — and says so where a correction is in force, so
         // the preview and the report showing different numbers is never a mystery.
-        seedOverriddenTravel(DEP.plusHours(55));
+        seedOverriddenTravel(page, DEP.plusHours(55));
 
         clickRowAction(TRIP, "Edit");
 
@@ -1668,13 +1818,14 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
                 "Overridden: 1 day on the report (the Wednesday was personal)");
         // The report row behind still shows the effective figure — the two disagree by
         // design, which is exactly why the preview line is annotated.
-        assertThat(getCurrentView().getElement().getTextRecursively()).contains("€79.00");
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively()).contains("€79.00");
     }
 
     @Test
-    void aSuppressedKindIsAnnotatedInThePreviewThatNoLongerListsIt() {
+    void aSuppressedKindIsAnnotatedInThePreviewThatNoLongerListsIt(UnifiedPage page) {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
         findButton().withText("Save").click();
 
@@ -1693,9 +1844,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * starts from: a persisted override standing on a persisted trip. Returns the
      * report id, with the view left open on it.
      */
-    private Long seedOverriddenTravel(LocalDateTime returnAt) {
+    private Long seedOverriddenTravel(UnifiedPage page, LocalDateTime returnAt) {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, returnAt);
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
         findButton().withText("Save").click();
         return id;
@@ -1788,8 +1939,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // and the group keep their cascade (payMeal ⟹ Not eligible); nothing is disabled.
 
     @Test
-    void theDailyAllowanceGroupOpensOnFullByDefaultAndSavesBothFlagsFalse() {
-        navigate(ReportDetailView.class);
+    void theDailyAllowanceGroupOpensOnFullByDefaultAndSavesBothFlagsFalse(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add travel").click();
 
         var group = dailyAllowance();
@@ -1816,8 +1967,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void choosingHalvedSavesEligibleWithAFreeLunch() {
-        navigate(ReportDetailView.class);
+    void choosingHalvedSavesEligibleWithAFreeLunch(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add travel").click();
         fillMinimalTrip();
 
@@ -1833,8 +1984,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void choosingNotEligibleSavesNotEligibleWithoutAFreeLunch() {
-        navigate(ReportDetailView.class);
+    void choosingNotEligibleSavesNotEligibleWithoutAFreeLunch(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add travel").click();
         fillMinimalTrip();
 
@@ -1852,7 +2003,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void editingATripReadsItsFlagsBackIntoTheGroup() {
+    void editingATripReadsItsFlagsBackIntoTheGroup(UnifiedPage page) {
         // freeLunch=true → Halved; notEligible=true → Not eligible — the mapping read
         // in the other direction, so an edit opens on what was saved.
         var zero = BigDecimal.ZERO.setScale(2);
@@ -1861,7 +2012,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = service.create(new ReportDetailDto(null, LocalDate.of(2026, 7, 10),
                 "seed", ReportStatus.DRAFT, 0L, List.of(), List.of(halved), zero, zero,
                 zero, zero, zero, zero));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         clickRowAction(TRIP, "Edit");
         assertThat(dailyAllowance().getSelected())
                 .isEqualTo(TravelFormModel.DailyAllowance.HALVED);
@@ -1869,7 +2020,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
 
         var mealId = seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
-        navigate(ReportDetailView.class, mealId);
+        page.navigate(ReportDetailView.class, mealId);
         clickRowAction(TRIP, "Edit");
         assertThat(dailyAllowance().getSelected())
                 .isEqualTo(TravelFormModel.DailyAllowance.NOT_ELIGIBLE);
@@ -1877,8 +2028,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void checkingPayMealAllowanceSelectsNotEligible() {
-        navigate(ReportDetailView.class);
+    void checkingPayMealAllowanceSelectsNotEligible(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add travel").click();
         dailyAllowance().selectItem("Halved, free lunch provided");
 
@@ -1892,8 +2043,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void selectingFullClearsPayMealAllowance() {
-        navigate(ReportDetailView.class);
+    void selectingFullClearsPayMealAllowance(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add travel").click();
         findCheckbox().withLabel("Pay meal allowance?").click();
         assertThat(dailyAllowance().getSelected())
@@ -1908,8 +2059,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void selectingHalvedClearsPayMealAllowance() {
-        navigate(ReportDetailView.class);
+    void selectingHalvedClearsPayMealAllowance(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add travel").click();
         findCheckbox().withLabel("Pay meal allowance?").click();
 
@@ -1921,18 +2072,21 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void travelEditorLaysItsFieldsOutAsTheDesignsTwoSectionGrid() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void travelEditorLaysItsFieldsOutAsTheDesignsTwoSectionGrid(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // travel-editor-dialog.md § Layout — #179 delta items 1–4, 7, 13: one
         // two-column grid with the line editor's gaps, two eyebrows and two rules as
         // colspan-2 rows, the design's field order, and the totals as the last row.
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add travel").click();
 
         var dialog = findDialog().getComponent();
         assertThat(dialog.getWidth()).isEqualTo("35rem");
         assertThat(dialog.getHeaderTitle()).isEqualTo("Add travel info");
 
-        var form = $(FormLayout.class).single();
+        // TODO unified: Browserless Escape Hatch: $(FormLayout.class).single(), no Wrapper for FormLayout: write one (ADR 0003)
+        var form = browserless.$(FormLayout.class).single();
         assertThat(form.getResponsiveSteps())
                 .extracting(step -> step.toJson().toString())
                 .containsExactly(
@@ -1983,9 +2137,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void travelEditorTitlesTheEditStateEditTravelInfo() {
+    void travelEditorTitlesTheEditStateEditTravelInfo(UnifiedPage page) {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         clickRowAction(TRIP, "Edit");
         assertThat(findDialog().getComponent().getHeaderTitle())
                 .isEqualTo("Edit travel info");
@@ -2034,11 +2188,14 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void removingATripRemovesItsPerDiemOnSave() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void removingATripRemovesItsPerDiemOnSave(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Per diem allowance");
 
         clickRowAction(TRIP, "Remove");
@@ -2049,8 +2206,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void choosingADepartureConstrainsTheReturnPickerRangeAndViceVersa() {
-        navigate(ReportDetailView.class);
+    void choosingADepartureConstrainsTheReturnPickerRangeAndViceVersa(UnifiedPage page) {
+        page.navigate(ReportDetailView.class);
 
         findButton().withAriaLabel("Add travel").click();
         findDateTimePicker().withLabel("Departure").setValue(DEP);
@@ -2070,14 +2227,14 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aReturnEqualToTheDepartureIsRefusedAndSaysWhy() {
+    void aReturnEqualToTheDepartureIsRefusedAndSaysWhy(UnifiedPage page) {
         // The reported case: same date *and* same time on both sides. The tester
         // refuses to type it at all now that the return's min sits a step past the
         // departure, so set it straight on the component — the way a crafted client
         // would — and prove the value still never reaches a save silently: the
         // binder's constraint validation lands the rule in the dialog's error
         // summary, not in the generic "something went wrong" dialog (issue #140).
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
 
         findButton().withAriaLabel("Add travel").click();
         findDateTimePicker().withLabel("Departure").setValue(DEP);
@@ -2101,13 +2258,13 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void anIncompleteTripShowsTheErrorSummaryAndGeneratesNothing() {
+    void anIncompleteTripShowsTheErrorSummaryAndGeneratesNothing(UnifiedPage page) {
         // The reciprocal min/max on the pickers keeps the *overlay* from producing an
         // invalid range (see the constraint test above), but a hand-typed one still
         // reaches Save — covered by the range-rule tests above. Here we prove the
         // always-enabled Save + error-summary rule (ADR-0020) on the other invalid
         // case: missing required fields.
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
 
         findButton().withAriaLabel("Add travel").click();
         saveTrip();
@@ -2120,12 +2277,12 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void travelPickersCarryIncompleteAndBadInputErrorMessages() {
+    void travelPickersCarryIncompleteAndBadInputErrorMessages(UnifiedPage page) {
         // Issue #85: entering only the date (not the time) in a departure/return
         // picker makes it invalid; without the incomplete-input message that error
         // reached the summary blank. The tester can't produce partial input, so we
         // assert the messages that prevent a blank error are configured.
-        navigate(ReportDetailView.class);
+        page.navigate(ReportDetailView.class);
         findButton().withAriaLabel("Add travel").click();
 
         for (String label : new String[] { "Departure", "Return" }) {
@@ -2146,13 +2303,16 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aSubmittedReportShowsTheTripButHidesEveryTripAction() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aSubmittedReportShowsTheTripButHidesEveryTripAction(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedSubmittedReportWithTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The trip info and its per-diem are still visible (read path)…
-        var text = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var text = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(text).contains("Client visit", "Per diem allowance", "€54.00");
         // …a trip-only read-only report must not prompt "add your first": the empty
         // state is hidden, so no visible span carries it (ADR-0020)…
@@ -2160,18 +2320,23 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
                 .isFalse();
         // …and every mutation surface is gone on a read-only report.
         assertThat(findButton().withAriaLabel("Add travel").exists()).isFalse();
-        assertThat(rowActions(TRIP)).isEmpty();
-        assertThat($(RowActionMenu.class).all()).isEmpty();
+        assertThat(rowActions(page, TRIP)).isEmpty();
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).all(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        assertThat(browserless.$(RowActionMenu.class).all()).isEmpty();
     }
 
     @Test
-    void removingALinePersistsOnSave() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void removingALinePersistsOnSave(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(getCurrentView().getElement().getTextRecursively()).contains("€60.00");
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively()).contains("€60.00");
 
-        clickRowAction($(RowActionMenu.class).first(), "Remove");
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).first(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        clickRowAction(browserless.$(RowActionMenu.class).first(), "Remove");
         findButton().withText("Save").click();
 
         assertThat(service.findMine(id).lines()).isEmpty();
@@ -2185,15 +2350,18 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     // colour are what /figma-visual-verification is for.
 
     @Test
-    void eachSectionIsOneCardHoldingItsLinesAsRows() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void eachSectionIsOneCardHoldingItsLinesAsRows(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(31));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
         findButton().withAriaLabel("Add expense").click();
         addLineThroughEditor("40.00");
 
         // Two cards for the whole view, not one per line: the travel variant and the
         // plain Expenses one.
-        var cards = $(Div.class).withClassName("expense-item-card").all();
+        // TODO unified: Browserless Escape Hatch: $(Div.class).withClassName("expense-item-card").all(), no Wrapper for Div: write one (ADR 0003)
+        var cards = browserless.$(Div.class).withClassName("expense-item-card").all();
         assertThat(cards).hasSize(2);
         assertThat(cards.getFirst().getClassNames()).contains("expense-item-card--travel");
         assertThat(cards.get(1).getClassNames())
@@ -2207,17 +2375,21 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(rowsIn(cards.get(1))).hasSize(1);
 
         // And nothing is a .line-card any more.
-        assertThat($(HorizontalLayout.class).withClassName("line-card").all()).isEmpty();
+        // TODO unified: Browserless Escape Hatch: $(HorizontalLayout.class).withClassName("line-card").all(), no Wrapper for HorizontalLayout: write one (ADR 0003)
+        assertThat(browserless.$(HorizontalLayout.class).withClassName("line-card").all()).isEmpty();
     }
 
     @Test
-    void aSectionWithNoRowsRendersNoCard() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aSectionWithNoRowsRendersNoCard(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReport(LocalDate.of(2026, 7, 1), "empty");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // A fresh draft has no trip and no line, so both cards are absent while both
         // headings and their Add actions stand.
-        assertThat($(Div.class).withClassName("expense-item-card").all()).isEmpty();
+        // TODO unified: Browserless Escape Hatch: $(Div.class).withClassName("expense-item-card").all(), no Wrapper for Div: write one (ADR 0003)
+        assertThat(browserless.$(Div.class).withClassName("expense-item-card").all()).isEmpty();
         assertThat(findSpan().withText("Travel info").exists()).isTrue();
         assertThat(findSpan().withText("Expenses").exists()).isTrue();
         assertThat(findButton().withAriaLabel("Add travel").exists()).isTrue();
@@ -2225,28 +2397,33 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void aReadOnlyReportWithNothingInASectionRendersNoSectionAtAll() {
+    void aReadOnlyReportWithNothingInASectionRendersNoSectionAtAll(UnifiedPage page) {
         // No trip, and read-only: a "TRAVEL INFO" heading over nothing, beside an Add
         // the report cannot offer, is worse than no section (ADR-0020).
         var id = seedSubmittedReport(LocalDate.of(2026, 7, 1), "80.00");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         assertThat(findSpan().withText("Travel info").exists()).isFalse();
         assertThat(findSpan().withText("Expenses").exists()).isTrue();
     }
 
     @Test
-    void anExpenseRowDrawsItsTypesOwnGlyphAndNoColourSwatch() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void anExpenseRowDrawsItsTypesOwnGlyphAndNoColourSwatch(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The glyph is the type's persisted icon (ADR-0026), not a colour hashed off
         // its name. seedReportWithLine files the line under the first active type,
         // Travel allowance, whose seeded glyph is `plane` (V15).
-        var glyph = $(Span.class).withClassName("expense-row-icon").single();
-        assertThat(find(SvgIcon.class, glyph).single().getSymbol()).isEqualTo("plane");
+        // TODO unified: Browserless Escape Hatch: $(Span.class).withClassName("expense-row-icon").single(), no Wrapper for Span: write one (ADR 0003)
+        var glyph = browserless.$(Span.class).withClassName("expense-row-icon").single();
+        // TODO unified: Browserless Escape Hatch: find(SvgIcon.class, glyph).single().getSymbol()
+        assertThat(browserless.find(SvgIcon.class, glyph).single().getSymbol()).isEqualTo("plane");
         // The hashed swatch is gone, along with the four-way --aura-red collision.
-        assertThat($(Div.class).withClassName("category-dot").all()).isEmpty();
+        // TODO unified: Browserless Escape Hatch: $(Div.class).withClassName("category-dot").all(), no Wrapper for Div: write one (ADR 0003)
+        assertThat(browserless.$(Div.class).withClassName("category-dot").all()).isEmpty();
     }
 
     /**
@@ -2262,7 +2439,9 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void aTypeWithNoGlyphChosenRendersNoneAndStillNamesItself() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aTypeWithNoGlyphChosenRendersNoneAndStillNamesItself(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var rate = firstActiveRate();
         var type = referenceData.createExpenseType("Glyphless", rate.id(), null);
         var line = ExpenseLineDto.of(null, type.id(), type.name(), type.icon(),
@@ -2271,110 +2450,129 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = service.create(new ReportDetailDto(null, LocalDate.of(2026, 7, 1),
                 "seed", ReportStatus.DRAFT, 0L, List.of(line), zero, zero, zero));
 
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(find(SvgIcon.class,
-                $(Span.class).withClassName("expense-row-icon").single()).all())
+        // TODO unified: Browserless Escape Hatch: find(SvgIcon.class,$(Span.class).withClassName("expense-row-icon").single()).all()
+        assertThat(browserless.find(SvgIcon.class,
+                browserless.$(Span.class).withClassName("expense-row-icon").single()).all())
                 .isEmpty();
         assertThat(findSpan().withText("Glyphless").exists()).isTrue();
     }
 
     @Test
-    void aRowIsNotClickableAndTheMenuIsTheOnlyRouteToEditing() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aRowIsNotClickableAndTheMenuIsTheOnlyRouteToEditing(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // Withdrawn with the card the row used to be: no .clickable anywhere, and the
         // row's own actions are exactly Edit and Remove behind the ⋮.
-        assertThat($(HorizontalLayout.class).withClassName("clickable").all()).isEmpty();
-        assertThat(rowActions("Travel allowance")).containsExactly("Edit", "Remove");
+        // TODO unified: Browserless Escape Hatch: $(HorizontalLayout.class).withClassName("clickable").all(), no Wrapper for HorizontalLayout: write one (ADR 0003)
+        assertThat(browserless.$(HorizontalLayout.class).withClassName("clickable").all()).isEmpty();
+        assertThat(rowActions(page, "Travel allowance")).containsExactly("Edit", "Remove");
     }
 
     @Test
-    void everyRowMenuIsNamedAfterItsRowAndEveryActionCarriesText() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void everyRowMenuIsNamedAfterItsRowAndEveryActionCarriesText(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("120"), true, new BigDecimal("12.00"));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // "Actions" alone is useless on a page holding five of them, so each names
         // its row (ADR-0020, row-action-menu.md).
         // A per-diem-eligible trip earns no meal allowance — the two are mutually
         // exclusive under the Finnish rule (issue #93) — so this trip's four rows are
         // the trip itself plus per diem, kilometre and parking.
-        assertThat($(RowActionMenu.class).all())
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).all(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        assertThat(browserless.$(RowActionMenu.class).all())
                 .extracting(ReportDetailViewUiTest::triggerName)
                 .containsExactlyInAnyOrder("Actions for " + TRIP,
                         "Actions for Per diem allowance (full day)",
                         "Actions for Kilometre allowance",
                         "Actions for Parking");
         // And every item in every menu is text-labelled, never an icon alone.
-        assertThat($(RowActionMenu.class).all()).allSatisfy(menu ->
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).all(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        assertThat(browserless.$(RowActionMenu.class).all()).allSatisfy(menu ->
                 assertThat(menu.getItems().get(0).getSubMenu().getItems())
                         .isNotEmpty()
                         .allSatisfy(item -> assertThat(item.getText()).isNotBlank()));
     }
 
     @Test
-    void aRowMenusNameFollowsTheTypeTheEditorChanges() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aRowMenusNameFollowsTheTypeTheEditorChanges(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithLine(LocalDate.of(2026, 7, 1), "60.00");
-        navigate(ReportDetailView.class, id);
-        assertThat(triggerName($(RowActionMenu.class).single()))
+        page.navigate(ReportDetailView.class, id);
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).single(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        assertThat(triggerName(browserless.$(RowActionMenu.class).single()))
                 .isEqualTo("Actions for Travel allowance");
 
         // The row keeps its component and re-reads the signal, so the accessible name
         // has to follow or it goes quietly stale.
-        openLineCardEditor();
+        openLineCardEditor(page);
         findComboBox(ExpenseTypeDto.class).withLabel("Expense type")
                 .selectItem("Accommodation");
         saveExpense();
 
-        assertThat(triggerName($(RowActionMenu.class).single()))
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).single(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        assertThat(triggerName(browserless.$(RowActionMenu.class).single()))
                 .isEqualTo("Actions for Accommodation");
     }
 
     @Test
-    void bothAddActionsReadAddAndAreToldApartByTheirAccessibleNames() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void bothAddActionsReadAddAndAreToldApartByTheirAccessibleNames(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReport(LocalDate.of(2026, 7, 1), "empty");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The design labels both simply "Add", so the page carries two controls with
         // the same visible name and the aria-label is what names the section.
         assertThat(findButton().withAriaLabel("Add travel").exists()).isTrue();
         assertThat(findButton().withAriaLabel("Add expense").exists()).isTrue();
-        assertThat($(Button.class).withCondition(
+        // TODO unified: Browserless Escape Hatch: $(Button.class).withCondition(button -> "Add".equals(button.getText())).all()
+        assertThat(browserless.$(Button.class).withCondition(
                 button -> "Add".equals(button.getText())).all()).hasSize(2);
         // And the back link keeps its own name.
         assertThat(findButton().withAriaLabel("Back to reports").exists()).isTrue();
     }
 
     @Test
-    void onlyTheVatBearingGeneratedLineShowsANetVatSplit() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void onlyTheVatBearingGeneratedLineShowsANetVatSplit(UnifiedPage page) {
         // Parking is VAT-bearing at 25.5 %; the per-diem, kilometre and meal lines are
         // statutory tax-free allowances. The design draws the same net/VAT string on
         // every generated row including the per-diem one, which is mock text rather
         // than a specification (#173).
         var id = seedReportWithFullTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11), new BigDecimal("120"), true, new BigDecimal("12.00"));
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
-        assertThat(splitOn("Parking")).startsWith("net ").contains("(25.5 %)");
-        assertThat(splitOn("Per diem allowance (full day)")).isNull();
-        assertThat(splitOn("Kilometre allowance")).isNull();
+        assertThat(splitOn(page, "Parking")).startsWith("net ").contains("(25.5 %)");
+        assertThat(splitOn(page, "Per diem allowance (full day)")).isNull();
+        assertThat(splitOn(page, "Kilometre allowance")).isNull();
 
         // …and the meal allowance, which this trip does not earn, on one that does.
-        navigate(ReportDetailView.class, seedReportWithMealTravel(
+        page.navigate(ReportDetailView.class, seedReportWithMealTravel(
                 LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11)));
-        assertThat(splitOn("Meal allowance")).isNull();
+        assertThat(splitOn(page, "Meal allowance")).isNull();
     }
 
     @Test
-    void aReadOnlyReportRendersNoRowMenusAndNoAddActionsButKeepsItsReceipts() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aReadOnlyReportRendersNoRowMenusAndNoAddActionsButKeepsItsReceipts(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithReceipt(LocalDate.of(2026, 7, 1), "70.00", "hotel.jpg");
         service.submit(id, service.findMine(id).version());
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // No menu at all — not a disabled trigger — and neither Add action.
-        assertThat($(RowActionMenu.class).all()).isEmpty();
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).all(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        assertThat(browserless.$(RowActionMenu.class).all()).isEmpty();
         assertThat(findButton().withAriaLabel("Add expense").exists()).isFalse();
         assertThat(findButton().withAriaLabel("Add travel").exists()).isFalse();
         // The receipt stays activatable, so a submitted report's receipts remain
@@ -2384,36 +2582,48 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     @Test
-    void anAttachmentRendersAsAPaperclipChipThatStillOpensThePreview() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void anAttachmentRendersAsAPaperclipChipThatStillOpensThePreview(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithReceipt(LocalDate.of(2026, 7, 1), "70.00", "hotel.jpg");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // The resting state is the design's chip — a paperclip and the filename — and
         // only the resting state changed: activating it opens the enlarge dialog.
-        var chip = $(Button.class).withClassName("expense-row-attachment").single();
+        // TODO unified: Browserless Escape Hatch: $(Button.class).withClassName("expense-row-attachment").single()
+        var chip = browserless.$(Button.class).withClassName("expense-row-attachment").single();
         assertThat(chip.getText()).isEqualTo("hotel.jpg");
-        assertThat(find(SvgIcon.class, chip).single().getSymbol()).isEqualTo("paperclip");
+        // TODO unified: Browserless Escape Hatch: find(SvgIcon.class, chip).single().getSymbol()
+        assertThat(browserless.find(SvgIcon.class, chip).single().getSymbol()).isEqualTo("paperclip");
 
-        test(chip).click();
-        assertThat($(Dialog.class).all()).anySatisfy(dialog ->
+        // TODO unified: Component Reference:test(chip).click(): replace it with a locator that finds the same component
+        browserless.test(chip).click();
+        // TODO unified: Browserless Escape Hatch: $(Dialog.class).all()
+        assertThat(browserless.$(Dialog.class).all()).anySatisfy(dialog ->
                 assertThat(dialog.isOpened()).isTrue());
-        assertThat($(Image.class).exists()).isTrue();
+        // TODO unified: Browserless Escape Hatch: $(Image.class).exists(), no Wrapper for Image: write one (ADR 0003)
+        assertThat(browserless.$(Image.class).exists()).isTrue();
     }
 
     @Test
-    void theStatusHistoryIsOneBoxWithItsSharedSectionHeading() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void theStatusHistoryIsOneBoxWithItsSharedSectionHeading(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedRejectedReport(LocalDate.of(2026, 7, 1), "100", "Missing receipt");
-        navigate(ReportDetailView.class, id);
+        page.navigate(ReportDetailView.class, id);
 
         // One box holding every entry, not one bordered box per entry, under the same
         // uppercase .section-label role the other two section headings use.
-        var box = $(Div.class).withClassName("status-history-box").single();
+        // TODO unified: Browserless Escape Hatch: $(Div.class).withClassName("status-history-box").single(), no Wrapper for Div: write one (ADR 0003)
+        var box = browserless.$(Div.class).withClassName("status-history-box").single();
         assertThat(box.getChildren().count()).isEqualTo(2);       // Submitted, Rejected
-        assertThat($(Span.class)
+        // TODO unified: Browserless Escape Hatch: $(Span.class).withCondition(span -> "Status history".equals(span.getText())).single().getClassNames(), no Wrapper for Span: write one (ADR 0003)
+        assertThat(browserless.$(Span.class)
                 .withCondition(span -> "Status history".equals(span.getText()))
                 .single().getClassNames())
                 .contains("section-label");
-        assertThat($(VerticalLayout.class).withClassName("status-history-entry").all())
+        // TODO unified: Browserless Escape Hatch: $(VerticalLayout.class).withClassName("status-history-entry").all(), no Wrapper for VerticalLayout: write one (ADR 0003)
+        assertThat(browserless.$(VerticalLayout.class).withClassName("status-history-entry").all())
                 .hasSize(2);
     }
 
@@ -2440,14 +2650,17 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * none. Read off the row rather than the whole view, since a manual line beside
      * it would otherwise satisfy the assertion.
      */
-    private String splitOn(String rowLabel) {
-        var row = $(HorizontalLayout.class)
+    private String splitOn(UnifiedPage page, String rowLabel) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: $(HorizontalLayout.class).withCondition(candidate -> candidate.getElement().getClassList().contains("expense-row")&& candidate.getElement().getTextRecursively().startsWith(rowLabel)).single(), no Wrapper for HorizontalLayout: write one (ADR 0003)
+        var row = browserless.$(HorizontalLayout.class)
                 .withCondition(candidate -> candidate.getElement().getClassList()
                         .contains("expense-row")
                         && candidate.getElement().getTextRecursively()
                                 .startsWith(rowLabel))
                 .single();
-        return find(Span.class, row).withCondition(
+        // TODO unified: Browserless Escape Hatch: find(Span.class, row).withCondition(span -> span.getText().startsWith("net ")).all().stream().map(Span::getText).findFirst().orElse(null)
+        return browserless.find(Span.class, row).withCondition(
                         span -> span.getText().startsWith("net ")).all().stream()
                 .map(Span::getText).findFirst().orElse(null);
     }
@@ -2457,8 +2670,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * clickable — the ⋮ menu is the only route to editing (#172) — so this opens the
      * first row's menu and chooses Edit.
      */
-    private void openLineCardEditor() {
-        clickRowAction($(RowActionMenu.class).first(), "Edit");
+    private void openLineCardEditor(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).first(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        clickRowAction(browserless.$(RowActionMenu.class).first(), "Edit");
     }
 
     /**
@@ -2471,8 +2686,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     /** The line editor's ComboBox with the given label. */
-    private ComboBox<?> comboBox(String label) {
-        return $(ComboBox.class).withLabel(label).single();
+    private ComboBox<?> comboBox(UnifiedPage page, String label) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: $(ComboBox.class).withLabel(label).single()
+        return browserless.$(ComboBox.class).withLabel(label).single();
     }
 
     /** The line editor's BigDecimalField with the given label. */
@@ -2486,8 +2703,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     /** The one row menu whose trigger names {@code rowLabel}. */
-    private RowActionMenu rowMenu(String rowLabel) {
-        return $(RowActionMenu.class)
+    private RowActionMenu rowMenu(UnifiedPage page, String rowLabel) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).withCondition(menu -> ("Actions for " + rowLabel).equals(triggerName(menu))).single(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        return browserless.$(RowActionMenu.class)
                 .withCondition(menu -> ("Actions for " + rowLabel)
                         .equals(triggerName(menu)))
                 .single();
@@ -2495,7 +2714,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
 
     /** Opens the named row's ⋮ and activates the named action. */
     private void clickRowAction(String rowLabel, String action) {
-        clickRowAction(rowMenu(rowLabel), action);
+        clickRowAction(rowMenu(page, rowLabel), action);
     }
 
     /** Opens a row's ⋮ and activates the named action. */
@@ -2516,8 +2735,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     /** The text labels a row's ⋮ offers, in order — empty if it has no menu at all. */
-    private List<String> rowActions(String rowLabel) {
-        var menus = $(RowActionMenu.class)
+    private List<String> rowActions(UnifiedPage page, String rowLabel) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).withCondition(menu -> ("Actions for " + rowLabel).equals(triggerName(menu))).all(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        var menus = browserless.$(RowActionMenu.class)
                 .withCondition(menu -> ("Actions for " + rowLabel)
                         .equals(triggerName(menu)))
                 .all();

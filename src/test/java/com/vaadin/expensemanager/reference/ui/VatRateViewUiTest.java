@@ -3,6 +3,11 @@ package com.vaadin.expensemanager.reference.ui;
 import com.vaadin.expensemanager.base.ui.DashboardView;
 import com.vaadin.expensemanager.reference.VatRateDto;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 
@@ -27,8 +32,8 @@ class VatRateViewUiTest extends AbstractReferenceDataViewUiTest {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void adminReachesViewWithSeededRatesRendered() {
-        navigate(VatRateView.class);
+    void adminReachesViewWithSeededRatesRendered(UnifiedPage page) {
+        page.navigate(VatRateView.class);
         // Percent formatting (trailing zeros trimmed) is the VAT-rate column's own concern.
         var rates = columnText(findGrid(VatRateDto.class), RATE_COL);
         assertThat(rates).containsExactly("25.5 %", "13.5 %", "10 %", "0 %");
@@ -36,22 +41,25 @@ class VatRateViewUiTest extends AbstractReferenceDataViewUiTest {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void adminSeesMenuEntry() {
-        navigate(DashboardView.class);
+    void adminSeesMenuEntry(UnifiedPage page) {
+        page.navigate(DashboardView.class);
         assertThat(navEntryLabels()).contains("VAT rates");
     }
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void userSeesNoMenuEntry() {
-        navigate(DashboardView.class);
+    void userSeesNoMenuEntry(UnifiedPage page) {
+        page.navigate(DashboardView.class);
         assertThat(navEntryLabels()).doesNotContain("VAT rates");
     }
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void userCannotReachRouteByUrl() {
-        assertThatThrownBy(() -> navigate(VatRateView.class))
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void userCannotReachRouteByUrl(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: navigate(VatRateView.class)
+        assertThatThrownBy(() -> browserless.navigate(VatRateView.class))
                 .isInstanceOf(Exception.class);
     }
 }

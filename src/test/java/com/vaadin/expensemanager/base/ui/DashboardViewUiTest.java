@@ -1,10 +1,14 @@
 package com.vaadin.expensemanager.base.ui;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
 import com.vaadin.flow.component.menubar.MenuBar;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
+
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ActiveProfiles;
@@ -22,9 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * logout action. Authenticates as the seeded admin and plain user via
  * {@link WithUserDetails} — the same records the form-stub logs in.
  */
-@SpringBootTest
+@UnifiedSpringBootTest
 @ActiveProfiles("test")
-class DashboardViewUiTest extends SpringBrowserlessTest {
+class DashboardViewUiTest {
 
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES =
@@ -36,8 +40,11 @@ class DashboardViewUiTest extends SpringBrowserlessTest {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void adminSeesAdminGreetingAndContent() {
-        var dashboard = navigate(DashboardView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void adminSeesAdminGreetingAndContent(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: navigate(DashboardView.class)
+        var dashboard = browserless.navigate(DashboardView.class);
 
         var text = textOf(dashboard);
         assertThat(text).contains("Welcome, Expense Admin");
@@ -47,8 +54,11 @@ class DashboardViewUiTest extends SpringBrowserlessTest {
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void userSeesUserGreetingAndContent() {
-        var dashboard = navigate(DashboardView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void userSeesUserGreetingAndContent(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: navigate(DashboardView.class)
+        var dashboard = browserless.navigate(DashboardView.class);
 
         var text = textOf(dashboard);
         assertThat(text).contains("Welcome, Demo User");
@@ -63,10 +73,13 @@ class DashboardViewUiTest extends SpringBrowserlessTest {
      */
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void headerShowsIdentityAndLogout() {
-        navigate(DashboardView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void headerShowsIdentityAndLogout(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(DashboardView.class);
 
-        var accountMenu = $(MenuBar.class).all().stream()
+        // TODO unified: Browserless Escape Hatch: $(MenuBar.class).all().stream().flatMap(bar -> bar.getItems().stream()).flatMap(item -> item.getSubMenu().getItems().stream()).toList(), no Wrapper for MenuBar: write one (ADR 0003)
+        var accountMenu = browserless.$(MenuBar.class).all().stream()
                 .flatMap(bar -> bar.getItems().stream())
                 .flatMap(item -> item.getSubMenu().getItems().stream())
                 .toList();

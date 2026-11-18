@@ -21,8 +21,11 @@ import com.vaadin.expensemanager.reference.ExpenseTypeDto;
 import com.vaadin.expensemanager.reference.ReferenceDataService;
 import com.vaadin.expensemanager.reference.VatRateDto;
 import com.vaadin.expensemanager.user.UserRepository;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
+
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,10 +43,12 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * The {@link ExpenseReportService} handle seeds the current user's reports and
  * asserts persisted state behind a UI action.
  */
-@SpringBootTest
+// TODO unified: Browserless-only pattern: @Transactional rolls back what the views write only on Browserless; commit test data and clean up to run everywhere (spec 02)
+@UnifiedSpringBootTest
 @ActiveProfiles("test")
 @Transactional
-abstract class AbstractReportViewUiTest extends SpringBrowserlessTest
+@RequiresTestingTool(TestingTool.BROWSERLESS)
+abstract class AbstractReportViewUiTest
         implements Locators {
 
     @ServiceConnection

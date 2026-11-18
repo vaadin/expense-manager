@@ -7,6 +7,11 @@ import com.vaadin.expensemanager.report.ui.ReportDetailView;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.router.RouterLink;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.security.test.context.support.WithUserDetails;
 
@@ -36,39 +41,50 @@ class ApprovalQueueViewUiTest extends AbstractApprovalViewUiTest {
     private static final String ADMIN_EMAIL = "admin@vaadin.com";
 
     @Test
-    void adminSeesSubmittedReportsAcrossOwnersWithReviewLinks() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void adminSeesSubmittedReportsAcrossOwnersWithReviewLinks(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var userReport = seedSubmittedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
         seedSubmittedReportForOwner(ADMIN_EMAIL, LocalDate.of(2026, 6, 1), "admin trip");
 
-        navigate(ApprovalQueueView.class);
+        page.navigate(ApprovalQueueView.class);
 
-        var text = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var text = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(text).contains("user trip", "admin trip", "Demo User",
                 "Expense Admin");
         // Each row is a real router link into the /review/{id} alias.
-        assertThat($(RouterLink.class).all().stream()
+        // TODO unified: Browserless Escape Hatch: $(RouterLink.class).all().stream().anyMatch(a -> ("review/" + userReport).equals(a.getElement().getAttribute("href"))), no Wrapper for RouterLink: write one (ADR 0003)
+        assertThat(browserless.$(RouterLink.class).all().stream()
                 .anyMatch(a -> ("review/" + userReport).equals(
                         a.getElement().getAttribute("href")))).isTrue();
     }
 
     @Test
-    void anEmptyQueueShowsTheEmptyState() {
-        navigate(ApprovalQueueView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void anEmptyQueueShowsTheEmptyState(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(ApprovalQueueView.class);
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Nothing to review");
     }
 
     @Test
-    void adminOpensAReportReadOnlyAndApprovesIt() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void adminOpensAReportReadOnlyAndApprovesIt(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedSubmittedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
 
-        navigate("review/" + id, ReportDetailView.class);
+        // TODO unified: Browserless Escape Hatch:navigate("review/" + id, ReportDetailView.class)
+        browserless.navigate("review/" + id, ReportDetailView.class);
 
         // Read-only review: no owner editing affordances, but the line is shown.
-        var text = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var text = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(text).contains("user trip", "Submitted");
         assertThat(findButton().withText("Save").exists()).isFalse();
         assertThat(findButton().withText("Submit for approval").exists()).isFalse();
@@ -80,13 +96,16 @@ class ApprovalQueueViewUiTest extends AbstractApprovalViewUiTest {
 
         assertThat(reportRepository.findById(id).orElseThrow().getStatus())
                 .isEqualTo(ReportStatus.APPROVED);
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Approved");
         assertThat(findButton().withText("Approve").exists()).isFalse();
     }
 
     @Test
-    void anApproverSeesAnOverriddenLineWithItsReasonAndBaselineReadOnly() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void anApproverSeesAnOverriddenLineWithItsReasonAndBaselineReadOnly(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // Quantity Override (ADR-0024): the approver must see where a judgement call
         // was made, why, and how far it deviates from the statutory figure — through
         // the same review route, entirely read-only.
@@ -94,9 +113,11 @@ class ApprovalQueueViewUiTest extends AbstractApprovalViewUiTest {
                 LocalUserSeeder.PLAIN_USER_EMAIL, LocalDate.of(2026, 6, 2), "user trip",
                 "the Wednesday was personal");
 
-        navigate("review/" + id, ReportDetailView.class);
+        // TODO unified: Browserless Escape Hatch:navigate("review/" + id, ReportDetailView.class)
+        browserless.navigate("review/" + id, ReportDetailView.class);
 
-        var text = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var text = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(text).contains("Overridden",
                 "Reason: the Wednesday was personal",
                 "Calculated: 2 × €54.00 = €108.00",
@@ -111,11 +132,14 @@ class ApprovalQueueViewUiTest extends AbstractApprovalViewUiTest {
     }
 
     @Test
-    void rejectingWithAnEmptyCommentShowsTheReasonRequiredErrorAndDoesNotSubmit() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void rejectingWithAnEmptyCommentShowsTheReasonRequiredErrorAndDoesNotSubmit(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedSubmittedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
 
-        navigate("review/" + id, ReportDetailView.class);
+        // TODO unified: Browserless Escape Hatch:navigate("review/" + id, ReportDetailView.class)
+        browserless.navigate("review/" + id, ReportDetailView.class);
         findButton().withText("Reject").click();          // opens the reason dialog
         findButton().withText("Reject report").click();   // confirm with empty comment
 
@@ -131,7 +155,9 @@ class ApprovalQueueViewUiTest extends AbstractApprovalViewUiTest {
     }
 
     @Test
-    void reviewHistoryShowsTerminalReportsAcrossOwnersWithTheDecisionAndReviewLinks() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void reviewHistoryShowsTerminalReportsAcrossOwnersWithTheDecisionAndReviewLinks(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var approvedId = seedApprovedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "approved trip");
         seedRejectedReportForOwner(ADMIN_EMAIL, LocalDate.of(2026, 6, 1),
@@ -139,33 +165,41 @@ class ApprovalQueueViewUiTest extends AbstractApprovalViewUiTest {
         // A still-pending report must NOT leak into the history.
         seedSubmittedReportForOwner(ADMIN_EMAIL, LocalDate.of(2026, 6, 3), "pending trip");
 
-        navigate(ReviewHistoryView.class);
+        page.navigate(ReviewHistoryView.class);
 
-        var text = getCurrentView().getElement().getTextRecursively();
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        var text = browserless.getCurrentView().getElement().getTextRecursively();
         assertThat(text).contains("approved trip", "rejected trip", "Approved",
                 "Rejected", "Demo User", "Expense Admin",
                 "Please itemise the taxi fares.");
         assertThat(text).doesNotContain("pending trip");
         // Each row is a real router link into the /review/{id} alias.
-        assertThat($(RouterLink.class).all().stream()
+        // TODO unified: Browserless Escape Hatch: $(RouterLink.class).all().stream().anyMatch(a -> ("review/" + approvedId).equals(a.getElement().getAttribute("href"))), no Wrapper for RouterLink: write one (ADR 0003)
+        assertThat(browserless.$(RouterLink.class).all().stream()
                 .anyMatch(a -> ("review/" + approvedId).equals(
                         a.getElement().getAttribute("href")))).isTrue();
     }
 
     @Test
-    void anEmptyReviewHistoryShowsTheEmptyState() {
-        navigate(ReviewHistoryView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void anEmptyReviewHistoryShowsTheEmptyState(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(ReviewHistoryView.class);
 
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("No reviewed reports yet");
     }
 
     @Test
-    void rejectingWithAReasonRecordsItAndMovesTheReportToRejected() {
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void rejectingWithAReasonRecordsItAndMovesTheReportToRejected(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedSubmittedReportForOwner(LocalUserSeeder.PLAIN_USER_EMAIL,
                 LocalDate.of(2026, 6, 2), "user trip");
 
-        navigate("review/" + id, ReportDetailView.class);
+        // TODO unified: Browserless Escape Hatch:navigate("review/" + id, ReportDetailView.class)
+        browserless.navigate("review/" + id, ReportDetailView.class);
         findButton().withText("Reject").click();
         findTextArea().withLabel("Rejection comment")
                 .setValue("Please itemise the taxi fares.");
@@ -181,7 +215,8 @@ class ApprovalQueueViewUiTest extends AbstractApprovalViewUiTest {
         // admin must not gain edit/save affordances on another user's report.
         assertThat(findButton().withText("Save").exists()).isFalse();
         assertThat(findButton().withText("Add expense").exists()).isFalse();
-        assertThat(getCurrentView().getElement().getTextRecursively())
+        // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
+        assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Rejected", "Please itemise the taxi fares.");
     }
 }

@@ -25,9 +25,14 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.tabs.Tab;
 import com.vaadin.flow.router.RouterLink;
 import com.vaadin.flow.spring.security.AuthenticationContext;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ActiveProfiles;
@@ -55,10 +60,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * overlay. This class asserts the structure and the behaviour; appearance goes
  * to visual verification against the frame.
  */
-@SpringBootTest
+// TODO unified: Browserless-only pattern: @Transactional rolls back what the views write only on Browserless; commit test data and clean up to run everywhere (spec 02)
+@UnifiedSpringBootTest
 @ActiveProfiles("test")
 @Transactional
-class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators {
+@RequiresTestingTool(TestingTool.BROWSERLESS)
+class AllowanceRatesViewUiTest implements Locators {
 
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES =
@@ -83,8 +90,8 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void adminReachesViewWithSeeded2026Rendered() {
-        navigate(AllowanceRatesView.class);
+    void adminReachesViewWithSeeded2026Rendered(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
         assertThat(findComboBox(Integer.class).getSelected()).isEqualTo(2026);
 
@@ -97,8 +104,11 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void userCannotReachRouteByUrl() {
-        assertThatThrownBy(() -> navigate(AllowanceRatesView.class))
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void userCannotReachRouteByUrl(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: navigate(AllowanceRatesView.class)
+        assertThatThrownBy(() -> browserless.navigate(AllowanceRatesView.class))
                 .isInstanceOf(Exception.class);
     }
 
@@ -111,9 +121,12 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void theTabBarLinksToAllThreeReferenceRoutes() {
-        navigate(AllowanceRatesView.class);
-        var tabs = $(ReferenceTabs.class).single();
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void theTabBarLinksToAllThreeReferenceRoutes(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(AllowanceRatesView.class);
+        // TODO unified: Browserless Escape Hatch: $(ReferenceTabs.class).single(), no Wrapper for ReferenceTabs: write one (ADR 0003)
+        var tabs = browserless.$(ReferenceTabs.class).single();
 
         assertThat(tabLinks(tabs))
                 .extracting(RouterLink::getText)
@@ -125,9 +138,12 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void theCurrentRoutesTabIsSelectedAndItsLinkIsAriaCurrent() {
-        navigate(AllowanceRatesView.class);
-        var tabs = $(ReferenceTabs.class).single();
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void theCurrentRoutesTabIsSelectedAndItsLinkIsAriaCurrent(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(AllowanceRatesView.class);
+        // TODO unified: Browserless Escape Hatch: $(ReferenceTabs.class).single(), no Wrapper for ReferenceTabs: write one (ADR 0003)
+        var tabs = browserless.$(ReferenceTabs.class).single();
 
         assertThat(tabs.getSelectedTab().getElement().getTextRecursively())
                 .isEqualTo("Allowance Rates");
@@ -147,8 +163,8 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      */
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void aUserWhoCannotReachARouteGetsNoTabForIt() {
-        navigate(DashboardView.class);
+    void aUserWhoCannotReachARouteGetsNoTabForIt(UnifiedPage page) {
+        page.navigate(DashboardView.class);
 
         var tabs = new ReferenceTabs(VatRateView.class, authenticationContext);
 
@@ -159,13 +175,17 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
     /** The bar is shared: the other two reference views host the same component. */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void theOtherTwoReferenceViewsHostTheSameBarWithTheirOwnTabSelected() {
-        navigate(VatRateView.class);
-        assertThat($(ReferenceTabs.class).single().getSelectedTab().getElement()
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void theOtherTwoReferenceViewsHostTheSameBarWithTheirOwnTabSelected(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(VatRateView.class);
+        // TODO unified: Browserless Escape Hatch: $(ReferenceTabs.class).single().getSelectedTab().getElement().getTextRecursively(), no Wrapper for ReferenceTabs: write one (ADR 0003)
+        assertThat(browserless.$(ReferenceTabs.class).single().getSelectedTab().getElement()
                 .getTextRecursively()).isEqualTo("VAT Rates");
 
-        navigate(ExpenseTypeView.class);
-        assertThat($(ReferenceTabs.class).single().getSelectedTab().getElement()
+        page.navigate(ExpenseTypeView.class);
+        // TODO unified: Browserless Escape Hatch: $(ReferenceTabs.class).single().getSelectedTab().getElement().getTextRecursively(), no Wrapper for ReferenceTabs: write one (ADR 0003)
+        assertThat(browserless.$(ReferenceTabs.class).single().getSelectedTab().getElement()
                 .getTextRecursively()).isEqualTo("Expense Types");
     }
 
@@ -177,8 +197,8 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void theToolbarSelectorIsUnlabelledButNamed() {
-        navigate(AllowanceRatesView.class);
+    void theToolbarSelectorIsUnlabelledButNamed(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
         var selector = findComboBox(Integer.class).getComponent();
 
         assertThat(selector.getLabel()).isNull();
@@ -189,8 +209,8 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
     /** Both are tertiary: with two side by side, neither is the page's loud action. */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void bothYearActionsAreTertiary() {
-        navigate(AllowanceRatesView.class);
+    void bothYearActionsAreTertiary(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
         assertThat(findButton().withText("Copy Year").component().getThemeNames())
                 .contains(ButtonVariant.TERTIARY.getVariantName());
@@ -206,10 +226,13 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void theThreeRatesRenderAsOneCardWithTheDomesticRowCarryingTwoValues() {
-        navigate(AllowanceRatesView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void theThreeRatesRenderAsOneCardWithTheDomesticRowCarryingTwoValues(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(AllowanceRatesView.class);
 
-        var card = $(Div.class).withClassName("rate-list-card").single();
+        // TODO unified: Browserless Escape Hatch: $(Div.class).withClassName("rate-list-card").single(), no Wrapper for Div: write one (ADR 0003)
+        var card = browserless.$(Div.class).withClassName("rate-list-card").single();
         var rows = card.getChildren().toList();
         assertThat(rows).hasSize(3);
         assertThat(rows).allSatisfy(row -> assertThat(
@@ -220,16 +243,19 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
                         "Meal Allowance");
 
         var domestic = rows.get(0);
-        assertThat(find(Span.class, domestic).withClassName("rate-row-value").all())
+        // TODO unified: Browserless Escape Hatch: find(Span.class, domestic).withClassName("rate-row-value").all()
+        assertThat(browserless.find(Span.class, domestic).withClassName("rate-row-value").all())
                 .hasSize(2);
-        assertThat(find(Span.class, domestic).withClassName("rate-row-dot").all())
+        // TODO unified: Browserless Escape Hatch: find(Span.class, domestic).withClassName("rate-row-dot").all()
+        assertThat(browserless.find(Span.class, domestic).withClassName("rate-row-dot").all())
                 .hasSize(1);
         assertThat(domestic.getElement().getTextRecursively())
                 .contains("Full day (over 10h)", "€54.00",
                         "Partial day (over 6h)", "€25.00");
 
         // The single-value rows carry one value and no dot.
-        assertThat(find(Span.class, rows.get(1)).withClassName("rate-row-dot").exists())
+        // TODO unified: Browserless Escape Hatch: find(Span.class, rows.get(1)).withClassName("rate-row-dot").exists()
+        assertThat(browserless.find(Span.class, rows.get(1)).withClassName("rate-row-dot").exists())
                 .isFalse();
         assertThat(rows.get(2).getElement().getTextRecursively()).contains("€13.50");
     }
@@ -243,33 +269,39 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void everyRowActionSitsBehindANamedEllipsisMenu() {
-        navigate(AllowanceRatesView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void everyRowActionSitsBehindANamedEllipsisMenu(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(AllowanceRatesView.class);
 
-        assertThat($(RowActionMenu.class).all())
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).all(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        assertThat(browserless.$(RowActionMenu.class).all())
                 .extracting(AllowanceRatesViewUiTest::triggerName)
                 .contains("Actions for Domestic per Diem",
                         "Actions for Kilometre Allowance",
                         "Actions for Meal Allowance");
 
         // Every item in every menu carries text, never an icon alone (ADR-0020).
-        assertThat($(RowActionMenu.class).all()).allSatisfy(menu ->
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).all(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        assertThat(browserless.$(RowActionMenu.class).all()).allSatisfy(menu ->
                 assertThat(menu.getItems().get(0).getSubMenu().getItems())
                         .isNotEmpty()
                         .allSatisfy(item -> assertThat(item.getText()).isNotBlank()));
 
         var grid = findGrid(ForeignPerDiemDto.class);
         var cell = grid.getCellComponent(9, ACTIONS_COL);
-        assertThat(triggerName(find(RowActionMenu.class, cell).single()))
+        // TODO unified: Browserless Escape Hatch: find(RowActionMenu.class, cell).single()
+        assertThat(triggerName(browserless.find(RowActionMenu.class, cell).single()))
                 .isEqualTo("Actions for Sweden");
     }
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void editingARateThroughItsMenuPersists() {
-        navigate(AllowanceRatesView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void editingARateThroughItsMenuPersists(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
-        clickRowAction(rateRowMenu("Meal Allowance"), "Edit");
+        clickRowAction(rateRowMenu(page, "Meal Allowance"), "Edit");
         findBigDecimalField().withLabel("Amount (€)").setValue(new BigDecimal("15"));
         findButton().withText("Save").click();
 
@@ -279,12 +311,15 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void editingAForeignPerDiemThroughItsGridMenuPersists() {
-        navigate(AllowanceRatesView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void editingAForeignPerDiemThroughItsGridMenuPersists(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(AllowanceRatesView.class);
         var cell = findGrid(ForeignPerDiemDto.class)
                 .getCellComponent(9, ACTIONS_COL);
 
-        clickRowAction(find(RowActionMenu.class, cell).single(), "Edit");
+        // TODO unified: Browserless Escape Hatch: find(RowActionMenu.class, cell).single()
+        clickRowAction(browserless.find(RowActionMenu.class, cell).single(), "Edit");
         findBigDecimalField().withLabel("Amount (€)").setValue(new BigDecimal("70"));
         findButton().withText("Save").click();
 
@@ -296,8 +331,8 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void searchFiltersTheForeignPerDiemsByCountry() {
-        navigate(AllowanceRatesView.class);
+    void searchFiltersTheForeignPerDiemsByCountry(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
         var grid = findGrid(ForeignPerDiemDto.class);
         assertThat(grid.size()).isEqualTo(12);
 
@@ -314,8 +349,8 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void theGridIsStripedAndFixedHeightRatherThanShowingEveryRow() {
-        navigate(AllowanceRatesView.class);
+    void theGridIsStripedAndFixedHeightRatherThanShowingEveryRow(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
         var grid = findGrid(ForeignPerDiemDto.class).getComponent();
 
         // The theme-agnostic constant; the LUMO_ pair is inert under Aura.
@@ -329,8 +364,8 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void addYearSeedsFromTheLatestYearAndSelectsIt() {
-        navigate(AllowanceRatesView.class);
+    void addYearSeedsFromTheLatestYearAndSelectsIt(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
         findButton().withText("Add Year").click();
         findIntegerField().withLabel("Year").setValue(2027);
@@ -344,8 +379,8 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void copyYearSeedsANamedTargetFromANamedSourceAndSelectsIt() {
-        navigate(AllowanceRatesView.class);
+    void copyYearSeedsANamedTargetFromANamedSourceAndSelectsIt(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
 
         findButton().withText("Copy Year").click();
         findComboBox(Integer.class).withLabel("Source year").selectItem("2026");
@@ -365,8 +400,10 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void copyYearRefusesAnExistingTargetInTheDialogsErrorSummary() {
-        navigate(AllowanceRatesView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void copyYearRefusesAnExistingTargetInTheDialogsErrorSummary(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(AllowanceRatesView.class);
 
         findButton().withText("Copy Year").click();
         findComboBox(Integer.class).withLabel("Source year").selectItem("2026");
@@ -376,7 +413,8 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
         assertThat(UI.getCurrent().getElement().getTextRecursively())
                 .contains("Please fix the following:")
                 .contains("Year 2026 already has allowance rates");
-        assertThat(find(ErrorSummary.class).all()).isNotEmpty();
+        // TODO unified: Browserless Escape Hatch: find(ErrorSummary.class).all(), no Wrapper for ErrorSummary: write one (ADR 0003)
+        assertThat(browserless.find(ErrorSummary.class).all()).isNotEmpty();
         // Still open, and nothing was written.
         assertThat(findButton().withText("Save").exists()).isTrue();
         assertThat(service.availableYears()).containsExactly(2026);
@@ -386,8 +424,8 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void addCountryThroughEditorAppendsRow() {
-        navigate(AllowanceRatesView.class);
+    void addCountryThroughEditorAppendsRow(UnifiedPage page) {
+        page.navigate(AllowanceRatesView.class);
         int before = findGrid(ForeignPerDiemDto.class).size();
 
         // "Add", not "Add country": the section heading beside it carries the noun.
@@ -425,8 +463,10 @@ class AllowanceRatesViewUiTest extends SpringBrowserlessTest implements Locators
                 .orElseThrow();
     }
 
-    private RowActionMenu rateRowMenu(String rowTitle) {
-        return $(RowActionMenu.class)
+    private RowActionMenu rateRowMenu(UnifiedPage page, String rowTitle) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).withCondition(menu -> ("Actions for " + rowTitle).equals(triggerName(menu))).single(), no Wrapper for RowActionMenu: write one (ADR 0003)
+        return browserless.$(RowActionMenu.class)
                 .withCondition(menu -> ("Actions for " + rowTitle)
                         .equals(triggerName(menu)))
                 .single();

@@ -10,8 +10,13 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.grid.GridLocator;
 import com.vaadin.expensemanager.base.ui.NavGroup;
 import com.vaadin.flow.spring.security.AuthenticationContext;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
+
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,10 +49,12 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  *       thread and share the rolled-back transaction.</li>
  * </ul>
  */
-@SpringBootTest
+// TODO unified: Browserless-only pattern: @Transactional rolls back what the views write only on Browserless; commit test data and clean up to run everywhere (spec 02)
+@UnifiedSpringBootTest
 @ActiveProfiles("test")
 @Transactional
-abstract class AbstractReferenceDataViewUiTest extends SpringBrowserlessTest
+@RequiresTestingTool(TestingTool.BROWSERLESS)
+abstract class AbstractReferenceDataViewUiTest
         implements Locators {
 
     @ServiceConnection
@@ -86,10 +93,11 @@ abstract class AbstractReferenceDataViewUiTest extends SpringBrowserlessTest
      * column, so they aren't reachable from a UI-wide {@code findButton()} —
      * scope the search to the cell component via {@code getCellComponent} first.
      */
-    protected Button rowActionButton(GridLocator<?> grid, int row, int actionsColumn,
-            String ariaLabel) {
+    protected Button rowActionButton(UnifiedPage page, GridLocator<?> grid, int row, int actionsColumn, String ariaLabel) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var cell = grid.getCellComponent(row, actionsColumn);
-        return find(Button.class, cell).withAriaLabel(ariaLabel).single();
+        // TODO unified: Browserless Escape Hatch: find(Button.class, cell).withAriaLabel(ariaLabel).single()
+        return browserless.find(Button.class, cell).withAriaLabel(ariaLabel).single();
     }
 
     /**

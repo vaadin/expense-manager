@@ -22,9 +22,10 @@ import com.vaadin.expensemanager.reference.ExpenseTypeRepository;
 import com.vaadin.expensemanager.reference.VatRate;
 import com.vaadin.expensemanager.reference.VatRateRepository;
 import com.vaadin.expensemanager.user.UserRepository;
+import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
+
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -46,9 +47,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * <p>The singleton Testcontainers Postgres is re-declared (F-008) and attaches to
  * the same container via {@code .withReuse(true)}.
  */
-@SpringBootTest
+@UnifiedSpringBootTest
 @ActiveProfiles("test")
-abstract class AbstractApprovalViewUiTest extends SpringBrowserlessTest
+abstract class AbstractApprovalViewUiTest
         implements Locators {
 
     @ServiceConnection

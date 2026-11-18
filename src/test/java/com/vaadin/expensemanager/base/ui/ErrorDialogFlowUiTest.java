@@ -1,6 +1,5 @@
 package com.vaadin.expensemanager.base.ui;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
 import com.vaadin.expensemanager.base.DomainRuleException;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
 import com.vaadin.flow.component.Component;
@@ -10,9 +9,14 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.binder.Binder;
 import com.vaadin.flow.server.ErrorEvent;
 import com.vaadin.flow.server.VaadinSession;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ActiveProfiles;
@@ -39,10 +43,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       opening no dialog.</li>
  * </ul>
  */
-@SpringBootTest
+@UnifiedSpringBootTest
 @ActiveProfiles("test")
 @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-class ErrorDialogFlowUiTest extends SpringBrowserlessTest {
+class ErrorDialogFlowUiTest {
 
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES =
@@ -56,8 +60,8 @@ class ErrorDialogFlowUiTest extends SpringBrowserlessTest {
     private UiErrorHandler errorHandler;
 
     @Test
-    void theGlobalHandlerIsInstalledAsTheSessionErrorHandler() {
-        navigate(DashboardView.class);
+    void theGlobalHandlerIsInstalledAsTheSessionErrorHandler(UnifiedPage page) {
+        page.navigate(DashboardView.class);
 
         // The VaadinServiceInitListener wired it onto the session, so any uncaught
         // action failure is routed here in production (issue #86).
@@ -66,12 +70,15 @@ class ErrorDialogFlowUiTest extends SpringBrowserlessTest {
     }
 
     @Test
-    void aTechnicalErrorOpensTheGenericDialogWithoutTheCause() {
-        navigate(DashboardView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aTechnicalErrorOpensTheGenericDialogWithoutTheCause(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(DashboardView.class);
 
         errorHandler.error(new ErrorEvent(new IllegalStateException("stack trace guts")));
 
-        var dialogs = $(ErrorDialog.class).all();
+        // TODO unified: Browserless Escape Hatch: $(ErrorDialog.class).all(), no Wrapper for ErrorDialog: write one (ADR 0003)
+        var dialogs = browserless.$(ErrorDialog.class).all();
         assertThat(dialogs).hasSize(1);
         String dialogText = textOf(dialogs.getFirst());
         assertThat(dialogText).contains(ErrorDialog.MESSAGE);
@@ -79,8 +86,10 @@ class ErrorDialogFlowUiTest extends SpringBrowserlessTest {
     }
 
     @Test
-    void aDomainRuleLandsInTheSummaryAndOpensNoDialog() {
-        navigate(DashboardView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void aDomainRuleLandsInTheSummaryAndOpensNoDialog(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        page.navigate(DashboardView.class);
         new EditorDialog<>("Editor", new TextField("Name"),
                 new Binder<>(Object.class), new Object())
                 .onSave(() -> {
@@ -88,21 +97,26 @@ class ErrorDialogFlowUiTest extends SpringBrowserlessTest {
                 })
                 .open();
 
-        clickSave();
+        clickSave(page);
 
         // No technical dialog; the user-actionable message shows in the form summary.
-        assertThat($(ErrorDialog.class).all()).isEmpty();
-        var summaries = $(ErrorSummary.class).all();
+        // TODO unified: Browserless Escape Hatch: $(ErrorDialog.class).all(), no Wrapper for ErrorDialog: write one (ADR 0003)
+        assertThat(browserless.$(ErrorDialog.class).all()).isEmpty();
+        // TODO unified: Browserless Escape Hatch: $(ErrorSummary.class).all(), no Wrapper for ErrorSummary: write one (ADR 0003)
+        var summaries = browserless.$(ErrorSummary.class).all();
         assertThat(summaries).anyMatch(summary ->
                 summary.isVisible() && textOf(summary).contains("Name is required"));
     }
 
-    private void clickSave() {
-        var save = $(Button.class).all().stream()
+    private void clickSave(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: $(Button.class).all().stream().filter(button -> "Save".equals(button.getText())).findFirst().orElseThrow(() -> new AssertionError("No 'Save' button in the editor"))
+        var save = browserless.$(Button.class).all().stream()
                 .filter(button -> "Save".equals(button.getText()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("No 'Save' button in the editor"));
-        test(save).click();
+        // TODO unified: Component Reference: test(save).click(): replace it with a locator that finds the same component
+        browserless.test(save).click();
     }
 
     /** Flattens every rendered text node in a component tree, for content assertions. */

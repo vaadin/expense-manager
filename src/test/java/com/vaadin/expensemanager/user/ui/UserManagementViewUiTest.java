@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
 import com.vaadin.browserless.locator.Locators;
 import com.vaadin.expensemanager.base.ui.DashboardView;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
@@ -17,9 +16,14 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.grid.GridLocator;
 import com.vaadin.expensemanager.base.ui.NavGroup;
 import com.vaadin.flow.spring.security.AuthenticationContext;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ActiveProfiles;
@@ -39,10 +43,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * (and combine). {@code @Transactional} rolls back the extra revoked user seeded
  * for the status-filter case.
  */
-@SpringBootTest
+// TODO unified: Browserless-only pattern: @Transactional rolls back what the views write only on Browserless; commit test data and clean up to run everywhere (spec 02)
+@UnifiedSpringBootTest
 @ActiveProfiles("test")
 @Transactional
-class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators {
+@RequiresTestingTool(TestingTool.BROWSERLESS)
+class UserManagementViewUiTest implements Locators {
 
     private static final int EMAIL_COL = 0;
     private static final int NAME_COL = 1;
@@ -71,8 +77,8 @@ class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void adminReachesViewWithSeededUsersRendered() {
-        navigate(UserManagementView.class);
+    void adminReachesViewWithSeededUsersRendered(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
         var grid = findGrid(UserSummaryDto.class);
 
         // Both seeded accounts appear with their effective role and text status.
@@ -86,22 +92,25 @@ class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void adminSeesMenuEntry() {
-        navigate(DashboardView.class);
+    void adminSeesMenuEntry(UnifiedPage page) {
+        page.navigate(DashboardView.class);
         assertThat(navEntryLabels()).contains("Users");
     }
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void userSeesNoMenuEntry() {
-        navigate(DashboardView.class);
+    void userSeesNoMenuEntry(UnifiedPage page) {
+        page.navigate(DashboardView.class);
         assertThat(navEntryLabels()).doesNotContain("Users");
     }
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    void userCannotReachRouteByUrl() {
-        assertThatThrownBy(() -> navigate(UserManagementView.class))
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void userCannotReachRouteByUrl(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: navigate(UserManagementView.class)
+        assertThatThrownBy(() -> browserless.navigate(UserManagementView.class))
                 .isInstanceOf(Exception.class);
     }
 
@@ -109,8 +118,8 @@ class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void searchNarrowsByNameOrEmail() {
-        navigate(UserManagementView.class);
+    void searchNarrowsByNameOrEmail(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
 
         // The plain user's email is user@vaadin.com; searching it excludes admin.
         findTextField().withLabel("Search").setValue("user@");
@@ -125,8 +134,8 @@ class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void roleFilterNarrowsRows() {
-        navigate(UserManagementView.class);
+    void roleFilterNarrowsRows(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
 
         findComboBox(String.class).withLabel("Role").selectItem("ADMIN");
         var roles = columnText(findGrid(UserSummaryDto.class), ROLE_COL);
@@ -139,14 +148,14 @@ class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void statusFilterNarrowsRowsAndCombinesWithRole() {
+    void statusFilterNarrowsRowsAndCombinesWithRole(UnifiedPage page) {
         // Seed a revoked admin so the revoked filter has something to show.
         var revoked = new User("revoked.admin@vaadin.com", "Revoked Admin",
                 Set.of(Role.ADMIN));
         revoked.setEnabled(false);
         userRepository.saveAndFlush(revoked);
 
-        navigate(UserManagementView.class);
+        page.navigate(UserManagementView.class);
 
         findComboBox(String.class).withLabel("Status").selectItem("Revoked");
         var grid = findGrid(UserSummaryDto.class);
@@ -163,11 +172,12 @@ class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void adminPromotesUserToAdminAndGridReflectsIt() {
-        navigate(UserManagementView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void adminPromotesUserToAdminAndGridReflectsIt(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
         var grid = findGrid(UserSummaryDto.class);
 
-        openEditorFor(grid, LocalUserSeeder.PLAIN_USER_EMAIL);
+        openEditorFor(page, grid, LocalUserSeeder.PLAIN_USER_EMAIL);
         findRadioButtonGroup(Role.class).withLabel("Role").selectItem("ADMIN");
         findButton().withText("Save").click();
 
@@ -177,11 +187,12 @@ class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void adminRevokesUserAndGridReflectsIt() {
-        navigate(UserManagementView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void adminRevokesUserAndGridReflectsIt(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
         var grid = findGrid(UserSummaryDto.class);
 
-        openEditorFor(grid, LocalUserSeeder.PLAIN_USER_EMAIL);
+        openEditorFor(page, grid, LocalUserSeeder.PLAIN_USER_EMAIL);
         // The seeded user starts enabled; clearing the checkbox revokes access.
         findCheckbox().withLabel("Account enabled").click();
         findButton().withText("Save").click();
@@ -192,12 +203,13 @@ class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators
 
     @Test
     @WithUserDetails(ADMIN_EMAIL)
-    void guardViolationShowsErrorSummaryAndLeavesStateUnchanged() {
-        navigate(UserManagementView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void guardViolationShowsErrorSummaryAndLeavesStateUnchanged(UnifiedPage page) {
+        page.navigate(UserManagementView.class);
         var grid = findGrid(UserSummaryDto.class);
 
         // The bootstrap admin is the only admin, so disabling itself is rejected.
-        openEditorFor(grid, ADMIN_EMAIL);
+        openEditorFor(page, grid, ADMIN_EMAIL);
         findCheckbox().withLabel("Account enabled").click();
         findButton().withText("Save").click();
 
@@ -212,9 +224,11 @@ class UserManagementViewUiTest extends SpringBrowserlessTest implements Locators
 
     // --------------------------------------------------------------- helpers
 
-    private void openEditorFor(GridLocator<?> grid, String email) {
+    private void openEditorFor(UnifiedPage page, GridLocator<?> grid, String email) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var cell = grid.getCellComponent(rowIndexFor(grid, email), ACTION_COL);
-        test(find(Button.class, cell).withAriaLabel("Edit user " + email).single())
+        // TODO unified: Component Reference: test(find(Button.class, cell).withAriaLabel("Edit user " + email).single()).click(): replace it with a locator that finds the same component
+        browserless.test(browserless.find(Button.class, cell).withAriaLabel("Edit user " + email).single())
                 .click();
     }
 

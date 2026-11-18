@@ -1,6 +1,5 @@
 package com.vaadin.expensemanager.base.ui;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
 import com.vaadin.browserless.locator.Locators;
 import com.vaadin.expensemanager.allowance.ui.AllowanceRatesView;
 import com.vaadin.expensemanager.reference.ui.ExpenseTypeView;
@@ -11,8 +10,13 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.orderedlayout.ThemableLayout;
+import com.vaadin.testing.unified.RequiresTestingTool;
+import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedPage;
+import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
+
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ActiveProfiles;
@@ -38,9 +42,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * decidable from a component tree. They are the visual verification's, and this
  * class stops at the class names and the tokens the two gaps name.
  */
-@SpringBootTest
+@UnifiedSpringBootTest
 @ActiveProfiles("test")
-class PageHeaderUiTest extends SpringBrowserlessTest implements Locators {
+class PageHeaderUiTest implements Locators {
 
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES =
@@ -58,19 +62,25 @@ class PageHeaderUiTest extends SpringBrowserlessTest implements Locators {
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void vatRatesOpensWithTheSharedHeaderAndACreateButton() {
-        var view = navigate(VatRateView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void vatRatesOpensWithTheSharedHeaderAndACreateButton(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: navigate(VatRateView.class)
+        var view = browserless.navigate(VatRateView.class);
 
-        assertHeader("VAT rates", CREATE_LABEL);
+        assertHeader(page, "VAT rates", CREATE_LABEL);
         assertSectionRhythm(view);
     }
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void expenseTypesOpensWithTheSharedHeaderAndACreateButton() {
-        var view = navigate(ExpenseTypeView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void expenseTypesOpensWithTheSharedHeaderAndACreateButton(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: navigate(ExpenseTypeView.class)
+        var view = browserless.navigate(ExpenseTypeView.class);
 
-        assertHeader("Expense types", CREATE_LABEL);
+        assertHeader(page, "Expense types", CREATE_LABEL);
         assertSectionRhythm(view);
     }
 
@@ -81,10 +91,13 @@ class PageHeaderUiTest extends SpringBrowserlessTest implements Locators {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    void allowanceRatesOpensWithTheSameBlockAndNoHeaderAction() {
-        var view = navigate(AllowanceRatesView.class);
+    @RequiresTestingTool(TestingTool.BROWSERLESS)
+    void allowanceRatesOpensWithTheSameBlockAndNoHeaderAction(UnifiedPage page) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
+        // TODO unified: Browserless Escape Hatch: navigate(AllowanceRatesView.class)
+        var view = browserless.navigate(AllowanceRatesView.class);
 
-        assertHeader("Allowance Rates", null);
+        assertHeader(page, "Allowance Rates", null);
         assertSectionRhythm(view);
     }
 
@@ -95,9 +108,11 @@ class PageHeaderUiTest extends SpringBrowserlessTest implements Locators {
      * @param action the create button's label, or {@code null} when the title row
      *               carries no action at all
      */
-    private void assertHeader(String title, String action) {
+    private void assertHeader(UnifiedPage page, String title, String action) {
+        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         // One block per page: composed by PageHeader, not by the view.
-        var header = find(PageHeader.class).single();
+        // TODO unified: Browserless Escape Hatch: find(PageHeader.class).single(), no Wrapper for PageHeader: write one (ADR 0003)
+        var header = browserless.find(PageHeader.class).single();
         assertThat(header.getElement().getClassList()).contains("page-header");
         // The design's 20px between the title row and the intro, through the
         // layout API rather than CSS.
