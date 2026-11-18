@@ -3,69 +3,66 @@ package com.vaadin.expensemanager.allowance.ui;
 import java.math.BigDecimal;
 import java.util.List;
 
-import com.vaadin.browserless.SpringBrowserlessTest;
-import com.vaadin.browserless.locator.Locators;
 import com.vaadin.expensemanager.allowance.AllowanceRateService;
-import com.vaadin.expensemanager.allowance.ForeignPerDiemDto;
+import com.vaadin.expensemanager.base.TableSnapshot;
 import com.vaadin.expensemanager.base.ui.DashboardView;
-import com.vaadin.expensemanager.base.ui.ErrorSummary;
 import com.vaadin.expensemanager.base.ui.ReferenceTabs;
-import com.vaadin.expensemanager.base.ui.RowActionMenu;
 import com.vaadin.expensemanager.reference.ui.ExpenseTypeView;
 import com.vaadin.expensemanager.reference.ui.VatRateView;
 import com.vaadin.expensemanager.user.LocalUserSeeder;
-import com.vaadin.flow.component.menubar.MenuBarTester;
-import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.contextmenu.MenuItem;
 import com.vaadin.flow.component.grid.GridVariant;
-import com.vaadin.flow.component.html.Div;
-import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.tabs.Tab;
-import com.vaadin.flow.router.RouterLink;
+import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.spring.security.AuthenticationContext;
-import com.vaadin.testing.unified.RequiresTestingTool;
-import com.vaadin.testing.unified.TestingTool;
+import com.vaadin.testing.unified.UnifiedElement;
 import com.vaadin.testing.unified.UnifiedPage;
-import com.vaadin.testing.unified.browserless.BrowserlessEscapeHatch;
+import com.vaadin.testing.unified.component.UnifiedBigDecimalField;
+import com.vaadin.testing.unified.component.UnifiedButton;
+import com.vaadin.testing.unified.component.UnifiedComboBox;
+import com.vaadin.testing.unified.component.UnifiedDialog;
+import com.vaadin.testing.unified.component.UnifiedDiv;
+import com.vaadin.testing.unified.component.UnifiedGrid;
+import com.vaadin.testing.unified.component.UnifiedIntegerField;
+import com.vaadin.testing.unified.component.UnifiedMenuBar;
+import com.vaadin.testing.unified.component.UnifiedSpan;
+import com.vaadin.testing.unified.component.UnifiedTabs;
+import com.vaadin.testing.unified.component.UnifiedTextField;
 import com.vaadin.testing.unified.spring.UnifiedSpringBootTest;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Browserless view test (pyramid layer 3, ADR-0012) for
+ * Unified view test (pyramid layer 3, ADR-0012) for
  * {@link AllowanceRatesView} — the ADMIN-only allowance-rate settings screen
  * (issue #48, redesigned to frame {@code 156:5396} in #169).
  *
  * <p>Drives the tab bar, the toolbar, the rate card's ⋮ menus, the searchable
  * foreign per-diem grid and both year-seeding editors as an admin would. Access
  * control mirrors the reference-data screens. The singleton Testcontainers
- * Postgres and {@code @Transactional} rollback follow
- * {@code AbstractReferenceDataViewUiTest} (F-008: {@link SpringBrowserlessTest}
- * occupies the inheritance slot).
+ * Postgres follows {@code AbstractReferenceDataViewUiTest} (F-008), and so does
+ * the clean slate: a {@link TableSnapshot} of the four rate tables, restored after
+ * each test, since a browser's request threads never see a test transaction.
  *
  * <p><strong>What is deliberately not here.</strong> Whether the dotted rules,
  * the 40px heading, the tab pill and the 512px grid actually <em>look</em> right
- * is not something a browserless tree can judge, and neither is a 3% Aura hover
+ * is not something a component tree can judge, and neither is a 3% Aura hover
  * overlay. This class asserts the structure and the behaviour; appearance goes
  * to visual verification against the frame.
  */
-// TODO unified: Browserless-only pattern: @Transactional rolls back what the views write only on Browserless; commit test data and clean up to run everywhere (spec 02)
 @UnifiedSpringBootTest
 @ActiveProfiles("test")
-@Transactional
-@RequiresTestingTool(TestingTool.BROWSERLESS)
-class AllowanceRatesViewUiTest implements Locators {
+class AllowanceRatesViewUiTest {
 
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES =
@@ -82,9 +79,21 @@ class AllowanceRatesViewUiTest implements Locators {
     @Autowired
     private AllowanceRateService service;
 
-    private static final int COUNTRY_COL = 0;
-    private static final int AMOUNT_COL = 1;
-    private static final int ACTIONS_COL = 2;
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    private TableSnapshot rates;
+
+    @BeforeEach
+    void snapshotRates() {
+        rates = TableSnapshot.take(jdbc, "domestic_per_diem_rate", "kilometre_rate",
+                "meal_allowance_rate", "foreign_per_diem_rate");
+    }
+
+    @AfterEach
+    void restoreRates() {
+        rates.restore();
+    }
 
     // ------------------------------------------------------- access control
 
@@ -93,23 +102,23 @@ class AllowanceRatesViewUiTest implements Locators {
     void adminReachesViewWithSeeded2026Rendered(UnifiedPage page) {
         page.navigate(AllowanceRatesView.class);
 
-        assertThat(findComboBox(Integer.class).getSelected()).isEqualTo(2026);
+        assertThat(yearSelector(page)).hasSelectedItem("2026");
 
-        var grid = findGrid(ForeignPerDiemDto.class);
-        assertThat(grid.size()).isEqualTo(12);
-        assertThat(grid.getCellText(0, COUNTRY_COL)).isEqualTo("Belgium");
-        assertThat(grid.getCellText(9, COUNTRY_COL)).isEqualTo("Sweden");
-        assertThat(grid.getCellText(9, AMOUNT_COL)).isEqualTo("€68.00");
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
+        assertThat(grid).hasRowCount(12);
+        assertThat(grid.row(0)).hasCellText("Country", "Belgium");
+        assertThat(grid.row(9)).hasCellText("Country", "Sweden");
+        assertThat(grid.row(9)).hasCellText("Per-diem", "€68.00");
     }
 
     @Test
     @WithUserDetails(LocalUserSeeder.PLAIN_USER_EMAIL)
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void userCannotReachRouteByUrl(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: navigate(AllowanceRatesView.class)
-        assertThatThrownBy(() -> browserless.navigate(AllowanceRatesView.class))
-                .isInstanceOf(Exception.class);
+        page.navigate(AllowanceRatesView.class);
+
+        // Access control answers a denied route with the not-found page, never the grid.
+        assertThat(page.findComponent(H2.class).withText("Page not found")).exists();
+        assertThat(page.find(UnifiedGrid.class)).doesNotExist();
     }
 
     // ---------------------------------------------------------- the tab bar
@@ -121,38 +130,26 @@ class AllowanceRatesViewUiTest implements Locators {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void theTabBarLinksToAllThreeReferenceRoutes(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(AllowanceRatesView.class);
-        // TODO unified: Browserless Escape Hatch: $(ReferenceTabs.class).single(), no Wrapper for ReferenceTabs: write one (ADR 0003)
-        var tabs = browserless.$(ReferenceTabs.class).single();
 
-        assertThat(tabLinks(tabs))
-                .extracting(RouterLink::getText)
+        assertThat(tabLinks(page)).extracting(link -> link.getText().strip())
                 .containsExactly("VAT Rates", "Expense Types", "Allowance Rates");
-        assertThat(tabLinks(tabs))
-                .extracting(RouterLink::getHref)
+        assertThat(tabLinks(page)).extracting(link -> link.getAttribute("href"))
                 .containsExactly("vat-rates", "expense-types", "allowance-rates");
     }
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void theCurrentRoutesTabIsSelectedAndItsLinkIsAriaCurrent(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(AllowanceRatesView.class);
-        // TODO unified: Browserless Escape Hatch: $(ReferenceTabs.class).single(), no Wrapper for ReferenceTabs: write one (ADR 0003)
-        var tabs = browserless.$(ReferenceTabs.class).single();
 
-        assertThat(tabs.getSelectedTab().getElement().getTextRecursively())
-                .isEqualTo("Allowance Rates");
+        assertThat(tabs(page)).hasSelectedTab("Allowance Rates");
         // aria-current is the half a screen reader reads; the selected pill is the
         // sighted half of the same fact, and it goes on the LINK, not the Tab.
-        assertThat(tabLinks(tabs).stream()
-                .filter(link -> "page".equals(
-                        link.getElement().getAttribute("aria-current")))
-                .map(RouterLink::getText))
+        assertThat(tabLinks(page).stream()
+                .filter(link -> "page".equals(link.getAttribute("aria-current")))
+                .map(link -> link.getText().strip()))
                 .containsExactly("Allowance Rates");
     }
 
@@ -175,18 +172,12 @@ class AllowanceRatesViewUiTest implements Locators {
     /** The bar is shared: the other two reference views host the same component. */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void theOtherTwoReferenceViewsHostTheSameBarWithTheirOwnTabSelected(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(VatRateView.class);
-        // TODO unified: Browserless Escape Hatch: $(ReferenceTabs.class).single().getSelectedTab().getElement().getTextRecursively(), no Wrapper for ReferenceTabs: write one (ADR 0003)
-        assertThat(browserless.$(ReferenceTabs.class).single().getSelectedTab().getElement()
-                .getTextRecursively()).isEqualTo("VAT Rates");
+        assertThat(tabs(page)).hasSelectedTab("VAT Rates");
 
         page.navigate(ExpenseTypeView.class);
-        // TODO unified: Browserless Escape Hatch: $(ReferenceTabs.class).single().getSelectedTab().getElement().getTextRecursively(), no Wrapper for ReferenceTabs: write one (ADR 0003)
-        assertThat(browserless.$(ReferenceTabs.class).single().getSelectedTab().getElement()
-                .getTextRecursively()).isEqualTo("Expense Types");
+        assertThat(tabs(page)).hasSelectedTab("Expense Types");
     }
 
     // ----------------------------------------------------------- the toolbar
@@ -199,11 +190,12 @@ class AllowanceRatesViewUiTest implements Locators {
     @WithUserDetails("admin@vaadin.com")
     void theToolbarSelectorIsUnlabelledButNamed(UnifiedPage page) {
         page.navigate(AllowanceRatesView.class);
-        var selector = findComboBox(Integer.class).getComponent();
+        UnifiedComboBox selector = page.find(UnifiedComboBox.class).withAccessibleName("Year");
 
-        assertThat(selector.getLabel()).isNull();
-        assertThat(selector.getAriaLabel()).contains("Year");
-        assertThat(selector.getWidth()).isEqualTo("180px");
+        assertThat(selector).exists();
+        String label = selector.element().getProperty("label");
+        assertThat(label == null || label.isBlank()).as("no visible label").isTrue();
+        assertThat(selector.element().getInlineStyle("width")).isEqualTo("180px");
     }
 
     /** Both are tertiary: with two side by side, neither is the page's loud action. */
@@ -211,11 +203,10 @@ class AllowanceRatesViewUiTest implements Locators {
     @WithUserDetails("admin@vaadin.com")
     void bothYearActionsAreTertiary(UnifiedPage page) {
         page.navigate(AllowanceRatesView.class);
+        String tertiary = ButtonVariant.TERTIARY.getVariantName();
 
-        assertThat(findButton().withText("Copy Year").component().getThemeNames())
-                .contains(ButtonVariant.TERTIARY.getVariantName());
-        assertThat(findButton().withText("Add Year").component().getThemeNames())
-                .contains(ButtonVariant.TERTIARY.getVariantName());
+        assertThat(page.find(UnifiedButton.class).withText("Copy Year").withTheme(tertiary)).exists();
+        assertThat(page.find(UnifiedButton.class).withText("Add Year").withTheme(tertiary)).exists();
     }
 
     // ------------------------------------------------------- the rate card
@@ -226,38 +217,33 @@ class AllowanceRatesViewUiTest implements Locators {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void theThreeRatesRenderAsOneCardWithTheDomesticRowCarryingTwoValues(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(AllowanceRatesView.class);
 
-        // TODO unified: Browserless Escape Hatch: $(Div.class).withClassName("rate-list-card").single(), no Wrapper for Div: write one (ADR 0003)
-        var card = browserless.$(Div.class).withClassName("rate-list-card").single();
-        var rows = card.getChildren().toList();
-        assertThat(rows).hasSize(3);
-        assertThat(rows).allSatisfy(row -> assertThat(
-                row.getElement().getClassList()).contains("rate-row"));
+        UnifiedDiv card = page.find(UnifiedDiv.class).withClassName("rate-list-card");
+        assertThat(card).hasCount(1);
+        List<UnifiedElement> children = card.element().children();
+        assertThat(children).hasSize(3);
+        assertThat(children).allSatisfy(row ->
+                assertThat(row.getAttribute("class")).contains("rate-row"));
 
-        assertThat(rows).extracting(row -> titleOf(row))
+        assertThat(card.find(UnifiedSpan.class).withClassName("rate-row-title").all())
+                .extracting(title -> title.getText().strip())
                 .containsExactly("Domestic per Diem", "Kilometre Allowance",
                         "Meal Allowance");
 
-        var domestic = rows.get(0);
-        // TODO unified: Browserless Escape Hatch: find(Span.class, domestic).withClassName("rate-row-value").all()
-        assertThat(browserless.find(Span.class, domestic).withClassName("rate-row-value").all())
-                .hasSize(2);
-        // TODO unified: Browserless Escape Hatch: find(Span.class, domestic).withClassName("rate-row-dot").all()
-        assertThat(browserless.find(Span.class, domestic).withClassName("rate-row-dot").all())
-                .hasSize(1);
-        assertThat(domestic.getElement().getTextRecursively())
-                .contains("Full day (over 10h)", "€54.00",
-                        "Partial day (over 6h)", "€25.00");
+        UnifiedDiv domestic = rateRow(card, "Domestic per Diem");
+        assertThat(domestic.find(UnifiedSpan.class).withClassName("rate-row-value")).hasCount(2);
+        assertThat(domestic.find(UnifiedSpan.class).withClassName("rate-row-dot")).hasCount(1);
+        for (String text : new String[] { "Full day (over 10h)", "€54.00",
+                "Partial day (over 6h)", "€25.00" }) {
+            assertThat(domestic).hasTextContaining(text);
+        }
 
         // The single-value rows carry one value and no dot.
-        // TODO unified: Browserless Escape Hatch: find(Span.class, rows.get(1)).withClassName("rate-row-dot").exists()
-        assertThat(browserless.find(Span.class, rows.get(1)).withClassName("rate-row-dot").exists())
-                .isFalse();
-        assertThat(rows.get(2).getElement().getTextRecursively()).contains("€13.50");
+        assertThat(rateRow(card, "Kilometre Allowance").find(UnifiedSpan.class)
+                .withClassName("rate-row-dot")).doesNotExist();
+        assertThat(rateRow(card, "Meal Allowance")).hasTextContaining("€13.50");
     }
 
     // ------------------------------------------------------ row action menus
@@ -269,60 +255,54 @@ class AllowanceRatesViewUiTest implements Locators {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void everyRowActionSitsBehindANamedEllipsisMenu(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(AllowanceRatesView.class);
 
-        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).all(), no Wrapper for RowActionMenu: write one (ADR 0003)
-        assertThat(browserless.$(RowActionMenu.class).all())
-                .extracting(AllowanceRatesViewUiTest::triggerName)
+        List<UnifiedMenuBar> menus = page.find(UnifiedMenuBar.class)
+                .withClassName("row-action-menu").all();
+        assertThat(menus).extracting(AllowanceRatesViewUiTest::triggerName)
                 .contains("Actions for Domestic per Diem",
                         "Actions for Kilometre Allowance",
                         "Actions for Meal Allowance");
 
         // Every item in every menu carries text, never an icon alone (ADR-0020).
-        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).all(), no Wrapper for RowActionMenu: write one (ADR 0003)
-        assertThat(browserless.$(RowActionMenu.class).all()).allSatisfy(menu ->
-                assertThat(menu.getItems().get(0).getSubMenu().getItems())
+        assertThat(menus).allSatisfy(menu ->
+                assertThat(menu.getItems(triggerName(menu)))
                         .isNotEmpty()
-                        .allSatisfy(item -> assertThat(item.getText()).isNotBlank()));
+                        .allSatisfy(item -> assertThat(item).isNotBlank()));
 
-        var grid = findGrid(ForeignPerDiemDto.class);
-        var cell = grid.getCellComponent(9, ACTIONS_COL);
-        // TODO unified: Browserless Escape Hatch: find(RowActionMenu.class, cell).single()
-        assertThat(triggerName(browserless.find(RowActionMenu.class, cell).single()))
-                .isEqualTo("Actions for Sweden");
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
+        assertThat(triggerName(gridRowMenu(grid, "Sweden"))).isEqualTo("Actions for Sweden");
     }
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void editingARateThroughItsMenuPersists(UnifiedPage page) {
         page.navigate(AllowanceRatesView.class);
 
-        clickRowAction(rateRowMenu(page, "Meal Allowance"), "Edit");
-        findBigDecimalField().withLabel("Amount (€)").setValue(new BigDecimal("15"));
-        findButton().withText("Save").click();
+        rateRowMenu(page, "Meal Allowance").clickItem("Actions for Meal Allowance", "Edit");
+        UnifiedDialog editor = page.find(UnifiedDialog.class);
+        editor.find(UnifiedBigDecimalField.class).withLabel("Amount (€)").setValue(new BigDecimal("15"));
+        editor.find(UnifiedButton.class).withText("Save").click();
 
+        assertThat(rateRow(page.find(UnifiedDiv.class).withClassName("rate-list-card"),
+                "Meal Allowance")).hasTextContaining("€15.00");
         assertThat(service.mealAllowance(2026).orElseThrow().amount())
                 .isEqualByComparingTo("15.00");
     }
 
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void editingAForeignPerDiemThroughItsGridMenuPersists(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(AllowanceRatesView.class);
-        var cell = findGrid(ForeignPerDiemDto.class)
-                .getCellComponent(9, ACTIONS_COL);
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
 
-        // TODO unified: Browserless Escape Hatch: find(RowActionMenu.class, cell).single()
-        clickRowAction(browserless.find(RowActionMenu.class, cell).single(), "Edit");
-        findBigDecimalField().withLabel("Amount (€)").setValue(new BigDecimal("70"));
-        findButton().withText("Save").click();
+        gridRowMenu(grid, "Sweden").clickItem("Actions for Sweden", "Edit");
+        UnifiedDialog editor = page.find(UnifiedDialog.class);
+        editor.find(UnifiedBigDecimalField.class).withLabel("Amount (€)").setValue(new BigDecimal("70"));
+        editor.find(UnifiedButton.class).withText("Save").click();
 
+        assertThat(grid.row().withCellText("Country", "Sweden")).hasCellText("Per-diem", "€70.00");
         assertThat(service.foreignPerDiem(2026, "Sweden").orElseThrow().amount())
                 .isEqualByComparingTo("70.00");
     }
@@ -333,31 +313,32 @@ class AllowanceRatesViewUiTest implements Locators {
     @WithUserDetails("admin@vaadin.com")
     void searchFiltersTheForeignPerDiemsByCountry(UnifiedPage page) {
         page.navigate(AllowanceRatesView.class);
-        var grid = findGrid(ForeignPerDiemDto.class);
-        assertThat(grid.size()).isEqualTo(12);
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
+        UnifiedTextField search = page.find(UnifiedTextField.class).withPlaceholder("Search");
+        assertThat(grid).hasRowCount(12);
 
-        findTextField().withPlaceholder("Search").setValue("swe");
+        search.setValue("swe");
 
-        assertThat(grid.size()).isEqualTo(1);
-        assertThat(grid.getCellText(0, COUNTRY_COL)).isEqualTo("Sweden");
+        assertThat(grid).hasRowCount(1);
+        assertThat(grid.row(0)).hasCellText("Country", "Sweden");
 
         // Clearing restores every row — the filter reads the field rather than
         // stacking a new one per keystroke.
-        findTextField().withPlaceholder("Search").setValue("");
-        assertThat(grid.size()).isEqualTo(12);
+        search.setValue("");
+        assertThat(grid).hasRowCount(12);
     }
 
     @Test
     @WithUserDetails("admin@vaadin.com")
     void theGridIsStripedAndFixedHeightRatherThanShowingEveryRow(UnifiedPage page) {
         page.navigate(AllowanceRatesView.class);
-        var grid = findGrid(ForeignPerDiemDto.class).getComponent();
-
         // The theme-agnostic constant; the LUMO_ pair is inert under Aura.
-        assertThat(grid.getThemeNames())
-                .contains(GridVariant.ROW_STRIPES.getVariantName());
-        assertThat(grid.getHeight()).isEqualTo("512px");
-        assertThat(grid.isAllRowsVisible()).isFalse();
+        UnifiedGrid grid = page.find(UnifiedGrid.class)
+                .withTheme(GridVariant.ROW_STRIPES.getVariantName());
+
+        assertThat(grid).exists();
+        assertThat(grid.element().getInlineStyle("height")).isEqualTo("512px");
+        assertThat(grid.element().getPropertyBoolean("allRowsVisible")).isNotEqualTo(Boolean.TRUE);
     }
 
     // ------------------------------------------------------ add / copy year
@@ -367,13 +348,14 @@ class AllowanceRatesViewUiTest implements Locators {
     void addYearSeedsFromTheLatestYearAndSelectsIt(UnifiedPage page) {
         page.navigate(AllowanceRatesView.class);
 
-        findButton().withText("Add Year").click();
-        findIntegerField().withLabel("Year").setValue(2027);
-        findButton().withText("Save").click();
+        page.find(UnifiedButton.class).withText("Add Year").click();
+        UnifiedDialog editor = page.find(UnifiedDialog.class);
+        editor.find(UnifiedIntegerField.class).withLabel("Year").setValue(2027);
+        editor.find(UnifiedButton.class).withText("Save").click();
 
         // The new year is selected and its foreign per-diems were copied.
-        assertThat(findComboBox(Integer.class).getSelected()).isEqualTo(2027);
-        assertThat(findGrid(ForeignPerDiemDto.class).size()).isEqualTo(12);
+        assertThat(yearSelector(page)).hasSelectedItem("2027");
+        assertThat(page.find(UnifiedGrid.class)).hasRowCount(12);
         assertThat(service.availableYears()).containsExactly(2027, 2026);
     }
 
@@ -382,12 +364,9 @@ class AllowanceRatesViewUiTest implements Locators {
     void copyYearSeedsANamedTargetFromANamedSourceAndSelectsIt(UnifiedPage page) {
         page.navigate(AllowanceRatesView.class);
 
-        findButton().withText("Copy Year").click();
-        findComboBox(Integer.class).withLabel("Source year").selectItem("2026");
-        findIntegerField().withLabel("Target year").setValue(2030);
-        findButton().withText("Save").click();
+        copyYear(page, "2026", 2030);
 
-        assertThat(findComboBox(Integer.class).getSelected()).isEqualTo(2030);
+        assertThat(yearSelector(page)).hasSelectedItem("2030");
         assertThat(service.availableYears()).containsExactly(2030, 2026);
         assertThat(service.mealAllowance(2030)).isPresent();
         assertThat(service.foreignPerDiems(2030)).hasSize(12);
@@ -400,23 +379,17 @@ class AllowanceRatesViewUiTest implements Locators {
      */
     @Test
     @WithUserDetails("admin@vaadin.com")
-    @RequiresTestingTool(TestingTool.BROWSERLESS)
     void copyYearRefusesAnExistingTargetInTheDialogsErrorSummary(UnifiedPage page) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         page.navigate(AllowanceRatesView.class);
 
-        findButton().withText("Copy Year").click();
-        findComboBox(Integer.class).withLabel("Source year").selectItem("2026");
-        findIntegerField().withLabel("Target year").setValue(2026);
-        findButton().withText("Save").click();
+        copyYear(page, "2026", 2026);
 
-        assertThat(UI.getCurrent().getElement().getTextRecursively())
-                .contains("Please fix the following:")
-                .contains("Year 2026 already has allowance rates");
-        // TODO unified: Browserless Escape Hatch: find(ErrorSummary.class).all(), no Wrapper for ErrorSummary: write one (ADR 0003)
-        assertThat(browserless.find(ErrorSummary.class).all()).isNotEmpty();
+        UnifiedDialog editor = page.find(UnifiedDialog.class);
+        UnifiedDiv summary = editor.find(UnifiedDiv.class).withClassName("error-summary");
+        assertThat(summary).hasTextContaining("Please fix the following:");
+        assertThat(summary).hasTextContaining("Year 2026 already has allowance rates");
         // Still open, and nothing was written.
-        assertThat(findButton().withText("Save").exists()).isTrue();
+        assertThat(editor).isOpen();
         assertThat(service.availableYears()).containsExactly(2026);
     }
 
@@ -426,66 +399,62 @@ class AllowanceRatesViewUiTest implements Locators {
     @WithUserDetails("admin@vaadin.com")
     void addCountryThroughEditorAppendsRow(UnifiedPage page) {
         page.navigate(AllowanceRatesView.class);
-        int before = findGrid(ForeignPerDiemDto.class).size();
+        UnifiedGrid grid = page.find(UnifiedGrid.class);
+        assertThat(grid).hasRowCount(12);
 
         // "Add", not "Add country": the section heading beside it carries the noun.
-        findButton().withText("Add").click();
-        findTextField().withLabel("Country").setValue("Japan");
-        findBigDecimalField().withLabel("Amount (€)").setValue(new BigDecimal("85"));
-        findButton().withText("Save").click();
+        page.find(UnifiedButton.class).withText("Add").click();
+        UnifiedDialog editor = page.find(UnifiedDialog.class);
+        editor.find(UnifiedTextField.class).withLabel("Country").setValue("Japan");
+        editor.find(UnifiedBigDecimalField.class).withLabel("Amount (€)").setValue(new BigDecimal("85"));
+        editor.find(UnifiedButton.class).withText("Save").click();
 
-        assertThat(findGrid(ForeignPerDiemDto.class).size()).isEqualTo(before + 1);
+        assertThat(grid).hasRowCount(13);
         assertThat(service.foreignPerDiem(2026, "Japan")).isPresent();
     }
 
     // ---- helpers -----------------------------------------------------------
 
+    private static UnifiedComboBox yearSelector(UnifiedPage page) {
+        return page.find(UnifiedComboBox.class).withAccessibleName("Year");
+    }
+
+    private static UnifiedTabs tabs(UnifiedPage page) {
+        return page.find(UnifiedTabs.class).withClassName("reference-tabs");
+    }
+
     /** The links inside the tab bar, in bar order. */
-    private static List<RouterLink> tabLinks(ReferenceTabs tabs) {
-        return tabs.getChildren()
-                .map(Tab.class::cast)
-                .flatMap(Component::getChildren)
-                .map(RouterLink.class::cast)
-                .toList();
+    private static List<UnifiedElement> tabLinks(UnifiedPage page) {
+        return tabs(page).element().findDescendants("a");
     }
 
-    /** The ⋮ trigger's accessible name, which must identify its row. */
-    private static String triggerName(RowActionMenu menu) {
-        return menu.getItems().get(0).getElement().getAttribute("aria-label");
+    /** The rate card's row with the given title. */
+    private static UnifiedDiv rateRow(UnifiedDiv card, String title) {
+        return card.find(UnifiedDiv.class).withClassName("rate-row")
+                .where(row -> row.getText().contains(title));
     }
 
-    private static String titleOf(Component row) {
-        return row.getChildren()
-                .filter(child -> child.getElement().getClassList()
-                        .contains("rate-row-title"))
-                .map(child -> child.getElement().getText())
-                .findFirst()
-                .orElseThrow();
+    /** The ⋮ trigger's accessible name (its only item, an icon), which must identify its row. */
+    private static String triggerName(UnifiedMenuBar menu) {
+        return menu.getItems().getFirst();
     }
 
-    private RowActionMenu rateRowMenu(UnifiedPage page, String rowTitle) {
-        BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
-        // TODO unified: Browserless Escape Hatch: $(RowActionMenu.class).withCondition(menu -> ("Actions for " + rowTitle).equals(triggerName(menu))).single(), no Wrapper for RowActionMenu: write one (ADR 0003)
-        return browserless.$(RowActionMenu.class)
-                .withCondition(menu -> ("Actions for " + rowTitle)
-                        .equals(triggerName(menu)))
-                .single();
+    private static UnifiedMenuBar rateRowMenu(UnifiedPage page, String rowTitle) {
+        return page.find(UnifiedMenuBar.class).withClassName("row-action-menu")
+                .withItem("Actions for " + rowTitle);
     }
 
-    /** Opens a row's ⋮ and activates the named action. */
-    private void clickRowAction(RowActionMenu menu, String action) {
-        List<MenuItem> items = menu.getItems().get(0).getSubMenu().getItems();
-        int index = -1;
-        for (int i = 0; i < items.size(); i++) {
-            if (action.equals(items.get(i).getText())) {
-                index = i;
-            }
-        }
-        assertThat(index).as("menu item '%s' is present", action).isNotNegative();
-        // Index rather than caption path: the top-level trigger is icon-only, so
-        // clickItem(String...) has no root caption to match against.
-        // The tester, not use(menu): 25.3's MenuBarLocator re-finds the menu from
-        // the UI, and a Grid cell component is not in that tree (F-082).
-        new MenuBarTester<>(menu).clickItem(0, index);
+    private static UnifiedMenuBar gridRowMenu(UnifiedGrid grid, String country) {
+        return grid.row().withCellText("Country", country).cell("Actions").find(UnifiedMenuBar.class);
+    }
+
+    private static void copyYear(UnifiedPage page, String source, int target) {
+        page.step("Copy year " + source + " to " + target, () -> {
+            page.find(UnifiedButton.class).withText("Copy Year").click();
+            UnifiedDialog editor = page.find(UnifiedDialog.class);
+            editor.find(UnifiedComboBox.class).withLabel("Source year").selectItem(source);
+            editor.find(UnifiedIntegerField.class).withLabel("Target year").setValue(target);
+            editor.find(UnifiedButton.class).withText("Save").click();
+        });
     }
 }
