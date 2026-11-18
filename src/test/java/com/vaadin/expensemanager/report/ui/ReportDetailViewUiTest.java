@@ -1021,7 +1021,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         page.navigate(ReportDetailView.class, id);
 
         // Re-cost the trip through its editor: 12.5 km → 120 km.
-        clickRowAction(TRIP, "Edit");
+        clickRowAction(page, TRIP, "Edit");
         findBigDecimalField().withLabel("Kilometre allowance (km)")
                 .setValue(new BigDecimal("120"));
         saveTrip();
@@ -1063,7 +1063,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(rowActions(page, "Parking")).contains("Add receipt");
 
         // Attach a receipt to the parking line via its focused editor.
-        clickRowAction("Parking", "Add receipt");
+        clickRowAction(page, "Parking", "Add receipt");
         findUpload().upload("parking.jpg", "image/jpeg", jpegBytes());
         findButton().withText("Save receipt").click();
 
@@ -1091,7 +1091,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
         page.navigate(ReportDetailView.class, id);
 
-        clickRowAction(TRIP, "Edit");                    // the trip row's menu
+        clickRowAction(page, TRIP, "Edit");                    // the trip row's menu
         dailyAllowance().selectItem("Halved, free lunch provided");
         saveTrip();
 
@@ -1155,7 +1155,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
 
         // Shorten the trip to a whole 24 h through its editor: the partial-day card
         // disappears, the full-day one stays, and the subtotal follows live.
-        clickRowAction(TRIP, "Edit");
+        clickRowAction(page, TRIP, "Edit");
         findDateTimePicker().withLabel("Return").setValue(DEP.plusHours(24));
         saveTrip();
 
@@ -1187,7 +1187,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("€133.00");
 
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
 
         // The row now reads the effective figures, badges the correction, gives the
         // reason and names what the calculator produced — before any save.
@@ -1217,7 +1217,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
         page.navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
         findButton().withText("Save").click();
 
         // Reload the persisted report from scratch: the badge, the reason and the
@@ -1238,7 +1238,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
                 DEP.plusHours(11));
         page.navigate(ReportDetailView.class, id);
 
-        overrideCount("Meal allowance", 2, "two meals were taken");
+        overrideCount(page, "Meal allowance", 2, "two meals were taken");
         findButton().withText("Save").click();
 
         var loaded = service.findMine(id);
@@ -1253,7 +1253,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
         page.navigate(ReportDetailView.class, id);
 
-        clickRowAction("Per diem allowance (full day)", "Override");
+        clickRowAction(page, "Per diem allowance (full day)", "Override");
         findIntegerField().withLabel("Count").setValue(1);
         findTextArea().withLabel("Reason for the override").setValue("   ");
         // Always-enabled submit (ADR-0020): the click is allowed, the reason shows.
@@ -1271,7 +1271,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
         page.navigate(ReportDetailView.class, id);
 
-        clickRowAction("Per diem allowance (partial day)", "Override");
+        clickRowAction(page, "Per diem allowance (partial day)", "Override");
         findIntegerField().withLabel("Count").setValue(2);
         findTextArea().withLabel("Reason for the override").setValue("two leftovers");
         findButton().withText("Save override").click();
@@ -1290,7 +1290,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
         page.navigate(ReportDetailView.class, id);
 
-        clickRowAction("Per diem allowance (full day)", "Override");
+        clickRowAction(page, "Per diem allowance (full day)", "Override");
 
         var count = (IntegerField) findIntegerField().withLabel("Count").getComponent();
         assertThat(count.getMin()).isEqualTo(0);
@@ -1316,10 +1316,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
         page.navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
         findButton().withText("Save").click();
 
-        clickRowAction("Per diem allowance (full day)", "Reset to calculated");
+        clickRowAction(page, "Per diem allowance (full day)", "Reset to calculated");
 
         // Back to the statutory figure, live, and the badge is gone.
         // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
@@ -1341,7 +1341,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
         page.navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
         findButton().withText("Save").click();
         service.submit(id, service.findMine(id).version());
 
@@ -1374,7 +1374,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
                 loaded.version());
         page.navigate(ReportDetailView.class, id);
 
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
         findButton().withText("Save").click();
 
         assertThat(service.findMine(id).perDiemTotal()).isEqualByComparingTo("79.00");
@@ -1384,8 +1384,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
      * Drives the whole override flow for one generated line: opens the row's
      * override dialog, enters a count and a reason, and confirms.
      */
-    private void overrideCount(String lineLabel, int count, String reason) {
-        clickRowAction(lineLabel, "Override");
+    private void overrideCount(UnifiedPage page, String lineLabel, int count, String reason) {
+        clickRowAction(page, lineLabel, "Override");
         findIntegerField().withLabel("Count").setValue(count);
         findTextArea().withLabel("Reason for the override").setValue(reason);
         findButton().withText("Save override").click();
@@ -1405,7 +1405,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
         page.navigate(ReportDetailView.class, id);
 
-        overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
+        overrideCount(page, "Per diem allowance (partial day)", 0, "the leftover was personal");
 
         // Nothing to destroy, so nothing to confirm — the correction applied at once.
         assertThat(findButton().withText("Remove line and receipt").exists()).isFalse();
@@ -1435,7 +1435,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = seedMealTravelWithSavedReceipt(page, "lunch.jpg");
         page.navigate(ReportDetailView.class, id);
 
-        overrideCount("Meal allowance", 0, "no meal was taken after all");
+        overrideCount(page, "Meal allowance", 0, "no meal was taken after all");
 
         // Nothing has happened yet: the dialog names the line, names the file, and says
         // the receipt goes with it.
@@ -1461,7 +1461,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = seedMealTravelWithSavedReceipt(page, "lunch.jpg");
         page.navigate(ReportDetailView.class, id);
 
-        overrideCount("Meal allowance", 0, "no meal was taken after all");
+        overrideCount(page, "Meal allowance", 0, "no meal was taken after all");
         findButton().withText("Cancel").click();
 
         // The line still stands at its statutory figure, with its receipt attached and
@@ -1489,11 +1489,11 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
         page.navigate(ReportDetailView.class, id);
-        clickRowAction("Meal allowance", "Add receipt");
+        clickRowAction(page, "Meal allowance", "Add receipt");
         findUpload().upload("lunch.jpg", "image/jpeg", jpegBytes());
         findButton().withText("Save receipt").click();
 
-        overrideCount("Meal allowance", 0, "no meal was taken");
+        overrideCount(page, "Meal allowance", 0, "no meal was taken");
         // A buffered receipt is just as destructible as a saved one — same warning.
         assertThat(UI.getCurrent().getElement().getTextRecursively())
                 .contains("lunch.jpg");
@@ -1515,7 +1515,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
         page.navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
+        overrideCount(page, "Per diem allowance (partial day)", 0, "the leftover was personal");
         findButton().withText("Save").click();
         // Reload, so the reset acts on a persisted suppression rather than a live one.
         page.navigate(ReportDetailView.class, id);
@@ -1523,7 +1523,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Removed from the report. Reason: the leftover was personal");
 
-        clickRowAction("Per diem allowance (partial day)", "Reset to calculated");
+        clickRowAction(page, "Per diem allowance (partial day)", "Reset to calculated");
 
         // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
         var shown = browserless.getCurrentView().getElement().getTextRecursively();
@@ -1546,7 +1546,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
         page.navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
+        overrideCount(page, "Per diem allowance (partial day)", 0, "the leftover was personal");
         findButton().withText("Save").click();
         service.submit(id, service.findMine(id).version());
 
@@ -1575,7 +1575,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var id = seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
         page.navigate(ReportDetailView.class, id);
-        clickRowAction("Meal allowance", "Add receipt");
+        clickRowAction(page, "Meal allowance", "Add receipt");
         findUpload().upload(filename, "image/jpeg", jpegBytes());
         findButton().withText("Save receipt").click();
         findButton().withText("Save").click();
@@ -1601,7 +1601,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
 
         // Lengthen the trip to 79 h → 3 full days: the number the override corrected
         // has moved, so the correction cannot stand.
-        editTripReturn(DEP.plusHours(79));
+        editTripReturn(page, DEP.plusHours(79));
 
         assertThat(clearingConfirm().getHeaderTitle()).isEqualTo("Clear your override?");
         assertThat(dialogText(clearingConfirm())).contains(
@@ -1630,7 +1630,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
-        editTripReturn(DEP.plusHours(79));
+        editTripReturn(page, DEP.plusHours(79));
         findButton().withText("Keep editing").click();
 
         // A full retreat: the trip editor is still open on the user's edit, and behind
@@ -1657,7 +1657,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         BrowserlessEscapeHatch browserless = BrowserlessEscapeHatch.of(page);
         var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
-        clickRowAction(TRIP, "Edit");
+        clickRowAction(page, TRIP, "Edit");
         findTextField().withLabel("Travel purpose").setValue("Client visit (Acme)");
         findTextField().withLabel("Destinations").setValue("Helsinki, Espoo");
         saveTrip();
@@ -1685,7 +1685,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
 
         // 55 h → 55 h 15 min: still 2 full days and one leftover over the 6 h partial
         // threshold. The inputs moved; the counts the override corrects did not.
-        editTripReturn(DEP.plusHours(55).plusMinutes(15));
+        editTripReturn(page, DEP.plusHours(55).plusMinutes(15));
 
         assertThat(findButton().withText("Clear and save trip").exists()).isFalse();
         // TODO unified: Browserless Escape Hatch: getCurrentView().getElement().getTextRecursively()
@@ -1704,12 +1704,12 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     @Test
     void clearingIsPerKindSoAnUnaffectedOverrideStands(UnifiedPage page) {
         var id = seedOverriddenTravel(page, DEP.plusHours(55));
-        overrideCount("Per diem allowance (partial day)", 1, "the leftover was worked");
+        overrideCount(page, "Per diem allowance (partial day)", 1, "the leftover was worked");
         findButton().withText("Save").click();
 
         // 55 h → 31 h: the full days drop 2 → 1, but the trip still earns exactly one
         // partial day, so only the full-day override is invalidated.
-        editTripReturn(DEP.plusHours(31));
+        editTripReturn(page, DEP.plusHours(31));
 
         assertThat(clearingConfirm().getHeaderTitle()).isEqualTo("Clear your override?");
         assertThat(dialogText(clearingConfirm()))
@@ -1735,7 +1735,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
 
         // Stop paying the meal allowance: its count drops 1 → 0. The trip stays not
         // eligible, so the per-diem count is 0 either side and its override stands.
-        clickRowAction(TRIP, "Edit");
+        clickRowAction(page, TRIP, "Edit");
         findCheckbox().withLabel("Pay meal allowance?").click();
         saveTrip();
 
@@ -1752,12 +1752,12 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     @Test
     void aTripEditThatMovesTwoOverriddenCountsReportsBothInOneConfirm(UnifiedPage page) {
         var id = seedOverriddenTravel(page, DEP.plusHours(55));
-        overrideCount("Per diem allowance (partial day)", 1, "the leftover was worked");
+        overrideCount(page, "Per diem allowance (partial day)", 1, "the leftover was worked");
         findButton().withText("Save").click();
 
         // 55 h → 72 h: three whole days and no leftover at all, so both corrected
         // counts move (full 2 → 3, partial 1 → 0) — one dialog, both named.
-        editTripReturn(DEP.plusHours(72));
+        editTripReturn(page, DEP.plusHours(72));
 
         // One dialog, both corrections named — not two prompts in a row.
         assertThat(clearingConfirm().getHeaderTitle()).isEqualTo("Clear your overrides?");
@@ -1781,7 +1781,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         // calculation's output, so it can never move the calculation's input.
         var id = seedOverriddenTravel(page, DEP.plusHours(55));
 
-        clickRowAction("Per diem allowance (full day)", "Edit override");
+        clickRowAction(page, "Per diem allowance (full day)", "Edit override");
         findIntegerField().withLabel("Count").setValue(2);
         findTextArea().withLabel("Reason for the override")
                 .setValue("both days were personal after all");
@@ -1811,7 +1811,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         // the preview and the report showing different numbers is never a mystery.
         seedOverriddenTravel(page, DEP.plusHours(55));
 
-        clickRowAction(TRIP, "Edit");
+        clickRowAction(page, TRIP, "Edit");
 
         assertThat(tripPreviewText()).contains(
                 "Per diem allowance (full day)", "€108.00",
@@ -1826,10 +1826,10 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     void aSuppressedKindIsAnnotatedInThePreviewThatNoLongerListsIt(UnifiedPage page) {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(55));
         page.navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (partial day)", 0, "the leftover was personal");
+        overrideCount(page, "Per diem allowance (partial day)", 0, "the leftover was personal");
         findButton().withText("Save").click();
 
-        clickRowAction(TRIP, "Edit");
+        clickRowAction(page, TRIP, "Edit");
 
         // The calculated preview still lists the partial day (the rules award it), and
         // the note says the report does not.
@@ -1847,7 +1847,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     private Long seedOverriddenTravel(UnifiedPage page, LocalDateTime returnAt) {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, returnAt);
         page.navigate(ReportDetailView.class, id);
-        overrideCount("Per diem allowance (full day)", 1, "the Wednesday was personal");
+        overrideCount(page, "Per diem allowance (full day)", 1, "the Wednesday was personal");
         findButton().withText("Save").click();
         return id;
     }
@@ -1902,8 +1902,8 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     /** Re-costs the open report's only trip by moving its return time. */
-    private void editTripReturn(LocalDateTime returnAt) {
-        clickRowAction(TRIP, "Edit");
+    private void editTripReturn(UnifiedPage page, LocalDateTime returnAt) {
+        clickRowAction(page, TRIP, "Edit");
         findDateTimePicker().withLabel("Return").setValue(returnAt);
         saveTrip();
     }
@@ -2013,7 +2013,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
                 "seed", ReportStatus.DRAFT, 0L, List.of(), List.of(halved), zero, zero,
                 zero, zero, zero, zero));
         page.navigate(ReportDetailView.class, id);
-        clickRowAction(TRIP, "Edit");
+        clickRowAction(page, TRIP, "Edit");
         assertThat(dailyAllowance().getSelected())
                 .isEqualTo(TravelFormModel.DailyAllowance.HALVED);
         findButton().withText("Cancel").inside(findDialog()).click();
@@ -2021,7 +2021,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         var mealId = seedReportWithMealTravel(LocalDate.of(2026, 7, 10), DEP,
                 DEP.plusHours(11));
         page.navigate(ReportDetailView.class, mealId);
-        clickRowAction(TRIP, "Edit");
+        clickRowAction(page, TRIP, "Edit");
         assertThat(dailyAllowance().getSelected())
                 .isEqualTo(TravelFormModel.DailyAllowance.NOT_ELIGIBLE);
         assertThat(checkboxValue("Pay meal allowance?")).isTrue();
@@ -2140,7 +2140,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     void travelEditorTitlesTheEditStateEditTravelInfo(UnifiedPage page) {
         var id = seedReportWithTravel(LocalDate.of(2026, 7, 10), DEP, DEP.plusHours(11));
         page.navigate(ReportDetailView.class, id);
-        clickRowAction(TRIP, "Edit");
+        clickRowAction(page, TRIP, "Edit");
         assertThat(findDialog().getComponent().getHeaderTitle())
                 .isEqualTo("Edit travel info");
     }
@@ -2198,7 +2198,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
         assertThat(browserless.getCurrentView().getElement().getTextRecursively())
                 .contains("Per diem allowance");
 
-        clickRowAction(TRIP, "Remove");
+        clickRowAction(page, TRIP, "Remove");
         findButton().withText("Save").click();
 
         assertThat(service.findMine(id).travels()).isEmpty();
@@ -2713,7 +2713,7 @@ class ReportDetailViewUiTest extends AbstractReportViewUiTest {
     }
 
     /** Opens the named row's ⋮ and activates the named action. */
-    private void clickRowAction(String rowLabel, String action) {
+    private void clickRowAction(UnifiedPage page, String rowLabel, String action) {
         clickRowAction(rowMenu(page, rowLabel), action);
     }
 
