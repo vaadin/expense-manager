@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Server-side view test (pyramid layer 3, ADR-0012) for the role-aware dashboard
- * and shell header (UC-007, ADR-0017), driven with the browserless tester.
+ * and shell header (UC-007, ADR-0017), on every Testing Tool.
  *
  * <p>Verifies the acceptance criteria: the dashboard greets the user by name and
  * renders role-appropriate content that differs for ADMIN vs USER, and

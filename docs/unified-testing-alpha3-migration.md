@@ -27,6 +27,7 @@ Maven wall clock, measured runs: 22.9 s / 22.2 s / 22.0 s. The warm-up took 21.9
 | AllowanceRatesViewUiTest | 18 | 6.948 | 6.570–7.203 |
 | AbstractReportViewUiTest (base) | 1 | 1 | 0 | `implements Locators` | 0 | 2 | — | — | `@Transactional` became a `TableSnapshot` of `expense_report`; lines, trips, receipts and status history follow through `on delete cascade`. New helpers: `view(page)`, `assertSays(..)` (retrying `hasTextContaining`) and `assertDoesNotSay(..)` (`page.waitUntil` on the text being gone). The admin-transition seeds (`seedRejectedReport`, `seedApprovedReport`) walk a lazy association, which only worked inside the old test transaction, so they now run in a `TransactionTemplate` (the extra attempt, S10) |
 | MyReportsViewUiTest | 5 | 5 | 0 | ~7 | 0 | 2 | 21/21 | **21/21** | `getCurrentView()` text became `assertSays`/`assertDoesNotSay` on the view column. The descendant walks for `MetricCard` and `SvgIcon` became `find(UnifiedVerticalLayout.class).withClassName("metric-card")` and `findComponent(SvgIcon.class)` with the `symbol`/`src` properties. "Neither focusable nor clickable" became a walk over `findDescendants("*")` checking tags and `tabindex`. `findDetails().atIndex(1).closeDetails()` became `all().get(0).close()`: the summaries are components, so `withSummaryText` has no text to match (second attempt) |
+| ReportDetailViewUiTest | 88 | 88 | 0 | ~287 | 1 (`UnifiedHorizontalLayout`) | 2 test runs (≈8 compile rounds) | 104/104 | **104/104** | Done in passes. **Scripted:** `find*()` → `page.find(Unified*.class)` (≈300 calls), `withAriaLabel` → `withAccessibleName` (49), `exists()).isFalse()` → `.visible()).doesNotExist()`, view, UI and dialog text chains → `assertSays`/`assertUiSays` helpers, and `page` threaded through 10 helpers. **By hand:** `RowActionMenu` (12 markers) → `UnifiedMenuBar`, which retires `MenuBarTester` (F-082). Layout tests read `colspan` attributes and inline styles; `FormLayout` responsive steps and spacings, which have no DOM reading common to both tools, are checked through `tryUnwrap(FormLayout.class)`. The issue #85 tests now **type** bad and incomplete dates (`typeText`) and assert the summary, where they used to inspect the i18n. The travel-editor child order is read after the totals appear, since a never-visible component is not in a browser's page. `@Transactional` and the `EntityManager.clear()` workaround it needed are gone. First full run: 1 Browserless and 5 Playwright failures. Their causes: `element().click()` does not toggle a `vaadin-checkbox` in Chromium (fixed with `check()`/`uncheck()`); an absence check on text that includes hidden rows; and the date format `typeText` parses differs by tool (S11) |
 | ApprovalAccessUiTest | 4 | 0.660 | 0.653–0.665 |
 | ApprovalQueueViewUiTest | 14 | 14 | 0 | ~19 | 0 | 2 | 8/8 | **8/8** | `getCurrentView().getElement().getTextRecursively()` became `assertThat(view(page)).hasTextContaining(..)`, which retries. The `RouterLink` "no Wrapper" markers became `findComponent(RouterLink.class).withAttribute("href", "review/"+id)`. `UI.getCurrent()` text in the reject dialog became `dialog.hasTextContaining(..)`. Repository checks moved after a UI assertion, so on a browser they run once the server has answered. Second attempt: `.visible()` on every "the action is gone" check (S9) |
 | AllowanceRatesViewUiTest | 16 | 16 | 0 | ~37 | 0 | 2 | 18/18 | **18/18** | `@Transactional` became a `TableSnapshot` of the four rate tables. All 8 `RowActionMenu` markers ("no Wrapper") were resolved with the Core Set `UnifiedMenuBar` (`RowActionMenu extends MenuBar`; its icon-only trigger is named by its `aria-label`), using `withItem("Actions for X")` and `clickItem("Actions for X", "Edit")`. That also works in a grid cell, which retires the `MenuBarTester` workaround for F-082. `ReferenceTabs` uses `UnifiedTabs`, the rate card `UnifiedDiv`/`UnifiedSpan` with class names, and the year selector `withAccessibleName("Year")`. Server-side getters (`getWidth()`, `getHeight()`, `getThemeNames()`, `isAllRowsVisible()`) became inline-style, theme and property reads. Edits now also assert the rendered value before the service read. The extra attempt was my call to a filter that does not exist |
@@ -138,12 +139,12 @@ in `ErrorDialogFlowUiTest`. The 58 skips are expected.
   `UnifiedPage page` parameter but did not give it to the helpers that call it: `clickRowAction(String,String)`,
   then `overrideCount(..)` and `editTripReturn(..)`. Result: a compile error. The parameter has to be passed up
   through every helper between the test method and the call that needs it.
-- **R2, recipe: a comment above a marked statement is swallowed into the marker.** In 6 places
-  (`ApprovalAccessUiTest` 1, `ExpenseTypeViewUiTest` 3, `ReportDetailViewUiTest` 2), the statement's leading
-  comment is joined into the `// TODO unified:` line with its line breaks removed, e.g.
+- **R2, recipe: a comment above a marked statement is copied into the marker, line breaks removed.** In 6
+  places (`ApprovalAccessUiTest` 1, `ExpenseTypeViewUiTest` 3, `ReportDetailViewUiTest` 2), the statement's
+  leading comment is repeated inside the `// TODO unified:` line as one flattened line, e.g.
   `// TODO unified: Browserless Escape Hatch:// The review alias is @PermitAll but gated in-view: a USER is forwarded to// the dashboard, ...navigate(..)`.
-  The original comment no longer exists as a comment, so it is **lost when the marker is resolved and
-  deleted**.
+  *Corrected during step 6:* the original comment stays in place above the marker, so nothing is lost when the
+  marker is deleted. It is noise in the marker text only. (Step 4 first reported it as a loss.)
 - **R3, recipe: direct `VaadinSession.getCurrent()` not detected.**
   `ErrorDialogFlowUiTest.theGlobalHandlerIsInstalledAsTheSessionErrorHandler` reads server state directly. It
   gets neither a marker nor `@RequiresTestingTool`, so it fails with an NPE on Playwright.
@@ -252,6 +253,19 @@ for the markers, so for each class the table separates **markers** from **unmark
   collection that the old class-level test transaction kept open. Without it they fail with
   `LazyInitializationException` on *both* tools. The fix is a `TransactionTemplate` around the seed. The skill's
   "commit test data and clean up" step does not warn that fixture code may depend on the open session.
+- **S11, `UnifiedDateTimePicker.typeText(date, time)`: the date format differs by tool.** Browserless parses
+  ISO text only, while a browser parses the field's locale format (en-US `7/1/2026` by default). This is documented
+  in the Javadoc. A test of "incomplete input" (a valid date, no time) therefore has to branch on
+  `page.hasRealBrowser()`, one of only two tool-aware lines in the suite. A locale-neutral way to type a valid date
+  would remove it.
+- **S12, `element().click()` on a `vaadin-checkbox` does nothing in Chromium.** On Browserless it toggles. The
+  same call passes on one tool and silently does nothing on the other, which surfaced as 4 Playwright failures far
+  from the click. `UnifiedCheckbox` has no `click()` of its own, only `check()`/`uncheck()`/`setChecked()`.
+  Converting the old `findCheckbox()...click()` mechanically to `element().click()` was the trap; the skill
+  could say "a checkbox is set, never clicked".
+- **S13, text includes hidden content on both tools.** `element().getText()` reads hidden children (Browserless:
+  the component tree; browser: `textContent`). An absence check written as "the dialog text does not contain X"
+  fails when the view hides X instead of removing it. Use a lookup with `.visible()` for absence, like S9.
 
 ## 3. Browserless runtime — after
 

@@ -17,7 +17,7 @@ import org.springframework.security.test.context.support.WithUserDetails;
 import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 
 /**
- * Browserless view test (pyramid layer 3, ADR-0008/ADR-0012) for the approval
+ * Unified view test (pyramid layer 3, ADR-0008/ADR-0012) for the approval
  * flow's <strong>non-admin</strong> access rules (Phase 5.1): a plain USER is kept
  * out of the queue route and out of admin review mode, and sees their own
  * approved report read-only.

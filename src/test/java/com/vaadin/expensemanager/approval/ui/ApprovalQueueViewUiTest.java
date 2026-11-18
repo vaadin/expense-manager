@@ -19,7 +19,7 @@ import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Browserless view test (pyramid layer 3, ADR-0012) for the approval tracer
+ * Unified view test (pyramid layer 3, ADR-0012) for the approval tracer
  * bullet's <strong>admin</strong> surfaces (Phase 5.1): the ADMIN-only queue
  * ({@link ApprovalQueueView}) and the admin-review mode on
  * {@link ReportDetailView} reached from it. The non-admin access checks live in
