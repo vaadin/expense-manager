@@ -208,6 +208,29 @@ for the markers, so for each class the table separates **markers** from **unmark
 | UserManagementViewUiTest | 3 | 3 | 0 | ~31 | 0 | 1 | 10/10 | **10/10** | Class-level `@Transactional` and `@RequiresTestingTool` removed, along with `implements Locators`. An `@AfterEach` restores the seeded users. `GridLocator` column scans became `row().withCellText("Email", ..)` with retrying `hasCellText`. The denied route is now "see H2 'Page not found', see no grid" instead of "navigate throws". The two nav-entry tests needed nothing: they read the nav model on the test thread, which works on any tool |
 | PageHeaderUiTest | 4 | 4 | 0 | 1 (`implements Locators`) | 2 | 1 | 3/3 | **3/3** | Wrote `UnifiedPageHeader` (`tag = "vaadin-vertical-layout", selector = ".page-header"`) and `UnifiedVerticalLayout`, in `base/ui`. The `PageHeader` component reference became a Wrapper. `getSpacing()` became `getInlineStyle("gap")`, which is portable because `setSpacing(String)` writes the inline `gap`. The `instanceof` child-order check became child class names. The view's section rhythm is found with `where(..)` on a vertical layout whose first children are the tabs and the header |
 
+**Step 6 totals**
+
+| Measure | Result |
+|---|---|
+| Migration Markers | **170 / 170 resolved, 0 kept** as Escape Hatches |
+| Unmarked Browserless lines converted (R5) | ≈ 440 |
+| `@RequiresTestingTool` left | **0** (was 140) |
+| Tests running on Playwright | **205 / 205** (was 0 passing: 58 skipped, 6 errors) |
+| Wrappers written (ADR 0003) | 3: `UnifiedPageHeader`, `UnifiedVerticalLayout`, `UnifiedHorizontalLayout` (`base/ui`). Every other "no Wrapper" marker (54 of 57) was resolved with a Core Set Wrapper plus a filter (R4, S5) |
+| Test support added | `base/TableSnapshot` (replaces `@Transactional` in 3 bases and 2 classes); `ErrorFlowTestView` (a test-only route) |
+| Checks a tool can't make | 3 extra checks through `tryUnwrap(..)` (FormLayout steps and spacings ×2, DateTimePicker min/max wording); they run where the component is at hand and are skipped elsewhere, without skipping the test |
+| Tool-aware branches | 1 (`page.hasRealBrowser()` to pick the date format, S11) |
+| Files green on the first run | 8 of 16; the rest on the second run (causes: S9, S10, S12, S13, my own API typos) |
+| Final run | `./mvnw verify` **583 / 583** (Browserless), `*UiTest` on Playwright **205 / 205**, in one JVM each; the reused Testcontainers database is back at its seed afterwards |
+
+**Cross-class leak caught by the final full run.** Each class passed on its own, but in the whole suite
+`ExpenseTypeViewUiTest` saw 15 expense types instead of 9, and a non-UI test
+(`ReferenceDataPersistenceIntegrationTest`) failed for the same reason. One report test creates an expense type
+through the service ("Glyphless"). Under `@Transactional` that was rolled back; afterwards it was committed, and the
+report base snapshotted only `expense_report`. With `testcontainers.reuse.enable=true` the rows survived across Maven
+runs: 6 rows from 6 runs. The fix: the report base also snapshots `vat_rate` and `expense_type` (restored after the
+reports), plus a one-off delete of the 6 rows from the reused local container.
+
 **Skill and API observations**
 
 - **S1, API gap: `UnifiedMenuBar` has no assertion.** `getItems(..)` and `isItemEnabled(..)` are immediate
@@ -263,6 +286,11 @@ for the markers, so for each class the table separates **markers** from **unmark
   from the click. `UnifiedCheckbox` has no `click()` of its own, only `check()`/`uncheck()`/`setChecked()`.
   Converting the old `findCheckbox()...click()` mechanically to `element().click()` was the trap; the skill
   could say "a checkbox is set, never clicked".
+- **S14, replacing `@Transactional` with a cleanup has to cover every table the class writes, including through
+  a service.** A per-class run cannot show a leak (the class passes), and with Testcontainers reuse the leak
+  outlives the run and breaks *other* classes, including non-UI integration tests that are still
+  `@Transactional`. Only a full-suite run on both tools caught it. Worth a line in the skill's
+  `@Transactional` guidance: list what the tests write, service calls included, and run the whole suite.
 - **S13, text includes hidden content on both tools.** `element().getText()` reads hidden children (Browserless:
   the component tree; browser: `textContent`). An absence check written as "the dialog text does not contain X"
   fails when the view hides X instead of removing it. Use a lookup with `.visible()` for absence, like S9.

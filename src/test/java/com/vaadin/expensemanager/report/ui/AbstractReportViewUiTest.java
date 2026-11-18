@@ -42,9 +42,10 @@ import static com.vaadin.testing.unified.assertion.UnifiedAssertions.assertThat;
  *
  * <p>Mirrors {@code AbstractReferenceDataViewUiTest}: the singleton
  * Testcontainers Postgres (F-008), and a {@link TableSnapshot} of
- * {@code expense_report} taken before each test and restored after it, so the
- * reports a test seeds — or the view saves — are deleted again (their lines,
- * trips, receipts and status history go with them, {@code on delete cascade}).
+ * {@code expense_report} — plus the reference tables a test may add a type or rate
+ * to — taken before each test and restored after it, so the reports a test seeds —
+ * or the view saves — are deleted again (their lines, trips, receipts and status
+ * history go with them, {@code on delete cascade}).
  * A browser's request threads never see a test transaction, so the former
  * {@code @Transactional} rollback only worked on Browserless. The
  * {@link ExpenseReportService} handle seeds the current user's reports and
@@ -85,7 +86,9 @@ abstract class AbstractReportViewUiTest {
 
     @BeforeEach
     void snapshotReports() {
-        reports = TableSnapshot.take(jdbc, "expense_report");
+        // Parents first: restore runs in reverse, so the reports (and the lines that
+        // point at a type) go before a type a test created is deleted.
+        reports = TableSnapshot.take(jdbc, "vat_rate", "expense_type", "expense_report");
     }
 
     @AfterEach
