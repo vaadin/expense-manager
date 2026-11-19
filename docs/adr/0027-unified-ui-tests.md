@@ -69,6 +69,7 @@ Result: **all 205 UI tests pass on Browserless and on Playwright**, with no test
 - **The recipe gets a migration started; it does not finish it.** It left 170 markers and ≈ 440 unmarked
   Browserless-only lines (F-083, F-084). A future migration of the same kind should budget for the
   unmarked part and end with a full-suite run on both tools.
-- Upstream issues filed for F-083 to F-089: parttio/unified-testing-tool
+- Upstream issues filed for F-083 to F-089 under the parent issue
+  [parttio/unified-testing-tool#375](https://github.com/parttio/unified-testing-tool/issues/375):
   [#323](https://github.com/parttio/unified-testing-tool/issues/323) to
   [#332](https://github.com/parttio/unified-testing-tool/issues/332). Each finding links its issue.
